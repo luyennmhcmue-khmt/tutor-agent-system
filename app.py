@@ -396,72 +396,49 @@ elif st.session_state.nav_page == "📊 Báo cáo Benchmark" and is_teacher:
     st.write("")
     st.markdown("##### 📋 Danh sách học sinh theo khối")
     st.dataframe(df_users, use_container_width=True)
+    # Đặt đoạn này vào khu vực giao diện dành riêng cho Giáo viên (is_teacher == True)
+st.markdown("---")
+st.markdown("### 🛡️ Quản lý Kỷ luật & Mở khóa Tài khoản Học sinh")
 
+# Import hàm từ db nếu chưa có
+from src.db import get_locked_users, unlock_user
+
+locked_students = get_locked_users()
+if locked_students:
+    st.warning(f"⚠️ Hiện có {len(locked_students)} học sinh đang bị khóa tài khoản do vi phạm kỷ luật.")
+    for s in locked_students:
+        c1, c2, c3 = st.columns([3, 2, 2])
+        with c1:
+           st.write(f"👤 **{s['full_name']}** (Mã: `{s['account_id']}` - Lớp: {dict(s).get('class_name', 'N/A')})")
+        with c2:
+            st.error(f"Số lỗi: {s['strikes']}/3 lần")
+        with c3:
+            if st.button(f"🔓 Mở khóa", key=f"unlock_btn_{s['id']}"):
+                unlock_user(s['account_id'])
+                st.success(f"Đã mở khóa thành công cho tài khoản {s['account_id']}!")
+                st.rerun()
+else:
+    st.info("👍 Hệ thống an toàn: Không có học sinh nào đang bị khóa tài khoản.")
 # ----------------- 6. HỒ SƠ CÁ NHÂN & ĐỔI MẬT KHẨU -----------------
-elif st.session_state.nav_page == user_tag:
-    if not is_teacher:
-        st.markdown(f"### 👤 HỒ SƠ HỌC SINH: {user['full_name']}")
-        col_p1, col_p2 = st.columns([1.1, 1.2])
-        with col_p1:
-            with st.container(border=True):
-                st.markdown("#### 📋 Thông tin cá nhân")
-                st.write(f"**Mã học sinh:** `{user['account_id']}`")
-                st.write(f"**Họ và tên:** **{user['full_name']}**")
-                st.write(f"**Lớp học:** {user['class_name']}")
-                st.write(f"**Trạng thái:** {user.get('status', 'Bình thường')}")
-                st.caption("ℹ️ Họ và tên được cố định theo hồ sơ danh sách lớp học của nhà trường.")
-
-        with col_p2:
-            with st.container(border=True):
-                st.markdown("#### 🔑 Đổi mật khẩu học sinh")
-                curr_pw = st.text_input("Mật khẩu hiện tại:", type="password", key="std_cpw")
-                new_pw = st.text_input("Mật khẩu mới:", type="password", key="std_npw")
-                cf_pw = st.text_input("Xác nhận mật khẩu mới:", type="password", key="std_cf_pw")
-                if st.button("Cập nhật mật khẩu", type="primary", use_container_width=True):
-                    if not curr_pw or not new_pw:
-                        st.warning("Vui lòng điền đầy đủ các ô.")
-                    elif new_pw != cf_pw:
-                        st.error("Mật khẩu xác nhận không khớp.")
-                    elif len(new_pw) < 6:
-                        st.warning("Mật khẩu mới phải có ít nhất 6 ký tự.")
-                    else:
-                        ok, msg = change_user_password(user["account_id"], curr_pw, new_pw)
-                        if ok:
-                            st.success(msg)
-                        else:
-                            st.error(msg)
+# 🛡️ Quản lý Kỷ luật & Mở khóa Tài khoản Học sinh (Đã căn chuẩn thụt lề 4 khoảng trắng)
+    st.markdown("---")
+    st.markdown("### 🛡️ Quản lý Kỷ luật & Mở khóa Tài khoản Học sinh")
+    
+    from src.db import get_locked_users, unlock_user
+    
+    locked_students = get_locked_users()
+    if locked_students:
+        st.warning(f"⚠️ Hiện có {len(locked_students)} học sinh đang bị khóa tài khoản do vi phạm kỷ luật.")
+        for s in locked_students:
+            c1, c2, c3 = st.columns([3, 2, 2])
+            with c1:
+                st.write(f"👤 **{s['full_name']}** (Mã: `{s['account_id']}` - Lớp: {s.get('class_name', 'N/A')})")
+            with c2:
+                st.error(f"Số lỗi: {s['strikes']}/3 lần")
+            with c3:
+                if st.button(f"🔓 Mở khóa", key=f"unlock_btn_{s['id']}"):
+                    unlock_user(s['account_id'])
+                    st.success(f"Đã mở khóa thành công cho tài khoản {s['account_id']}!")
+                    st.rerun()
     else:
-        clean_name = user['full_name'].replace("Thầy/Cô", "").replace("Cô", "").replace("Thầy", "").strip()
-        display_name = clean_name if clean_name else "Giáo viên"
-
-        st.markdown(f"### ⚙️ QUẢN TRỊ VIÊN & GIÁO VIÊN: {display_name}")
-        col_t1, col_t2 = st.columns(2)
-        with col_t1:
-            with st.container(border=True):
-                st.markdown("#### 📋 Thông tin giảng dạy")
-                st.write(f"**Email tài khoản:** `{user['email']}`")
-                st.write(f"**Họ tên Giáo viên:** {display_name}")
-                st.write(f"**Đơn vị phụ trách:** {user.get('class_name', 'Tổ Tin Học')}")
-
-        with col_t2:
-            with st.container(border=True):
-                st.markdown("#### 🔑 Đổi mật khẩu Giáo viên")
-                t_curr_pw = st.text_input("Mật khẩu hiện tại:", type="password", key="gv_cpw")
-                t_new_pw = st.text_input("Mật khẩu mới:", type="password", key="gv_npw")
-                t_cf_pw = st.text_input("Xác nhận mật khẩu:", type="password", key="gv_cf_pw")
-                if st.button("Cập nhật mật khẩu Thầy/Cô", type="primary", use_container_width=True):
-                    if t_new_pw != t_cf_pw:
-                        st.error("Mật khẩu xác nhận không trùng khớp.")
-                    else:
-                        ok, msg = change_user_password(user["email"], t_curr_pw, t_new_pw)
-                        if ok:
-                            st.success(msg)
-                        else:
-                            st.error(msg)
-
-    st.write("")
-    if st.button("🚪 Đăng Xuất Khỏi Hệ Thống", type="secondary"):
-        st.session_state.user = None
-        st.session_state.chat_history = []
-        st.session_state.nav_page = "🏠 Trang chủ"
-        st.rerun()
+        st.info("👍 Hệ thống an toàn: Không có học sinh nào đang bị khóa tài khoản.")

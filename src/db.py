@@ -397,3 +397,26 @@ def add_user_strike(user_identifier: str) -> tuple[int, bool]:
     conn.commit()
     conn.close()
     return current_strikes, bool(is_locked)
+def get_locked_users():
+    """Lấy danh sách các học sinh đang bị khóa tài khoản."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE is_locked = 1")
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+def unlock_user(account_id: str):
+    """Mở khóa tài khoản học sinh và đặt lại số lần vi phạm về 0."""
+    conn = get_connection()
+    cur = conn.cursor()
+    key = str(account_id).strip().lower()
+    cur.execute("""
+        UPDATE users 
+        SET is_locked = 0, strikes = 0, status = 'Hoạt động bình thường'
+        WHERE LOWER(COALESCE(account_id, '')) = ? 
+           OR LOWER(COALESCE(email, '')) = ? 
+           OR CAST(id AS TEXT) = ?
+    """, (key, key, key))
+    conn.commit()
+    conn.close()
