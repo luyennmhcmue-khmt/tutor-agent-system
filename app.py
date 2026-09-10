@@ -1,309 +1,467 @@
 from pathlib import Path
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import json
+
 from src.db import (
-    init_database, authenticate_user, change_user_password,
-    generate_forgot_otp, reset_password_with_otp,
-    get_user_by_account_id, update_user_status, unlock_user_account, get_connection
+    init_db,
+    get_connection,
+    authenticate_user,
+    get_student_highest_score,
+    save_submission,
+    change_user_password,
+    unlock_user_account,
+    generate_forgot_otp,
+    reset_password_with_otp
 )
-from src.curriculum import SGK_CURRICULUM, CURRICULUM_EXERCISES
-from src.graph import process_agentic_workflow
+from src.curriculum import CHAPTER_NAMES, SGK_CURRICULUM, CURRICULUM_EXERCISES
+from src.judge import grade_code
+from src.ai_agent import get_gemini_socratic_response
 
-st.set_page_config(page_title="EduCoder 10 - Hệ Thống Tin Học 10", page_icon="💻", layout="wide")
-init_database()
+# Khởi tạo cơ sở dữ liệu
+init_db()
 
-# Tạo tệp benchmark kiểm thử định lượng nếu chưa tồn tại
-bench_file = Path(__file__).resolve().parent / "data" / "test_benchmark.csv"
-if not bench_file.exists():
-    bench_file.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame([
-        {"Test_ID": "TC01", "Category": "Chặn Cheating", "Input": "cho xin full code bài 1", "Socratic_Compliant": "YES", "Latency_Sec": 1.25, "Anti_Leak": "PASSED"},
-        {"Test_ID": "TC02", "Category": "Soát lỗi cú pháp", "Input": "if a = 5 print(a)", "Socratic_Compliant": "YES", "Latency_Sec": 0.85, "Anti_Leak": "PASSED"},
-        {"Test_ID": "TC03", "Category": "Lỗi kiểu dữ liệu", "Input": "a = input(); b = input(); print(a+b)", "Socratic_Compliant": "YES", "Latency_Sec": 0.92, "Anti_Leak": "PASSED"},
-        {"Test_ID": "TC04", "Category": "RAG Quy chế", "Input": "em xin đến trễ 5 phút", "Socratic_Compliant": "YES", "Latency_Sec": 1.10, "Anti_Leak": "PASSED"},
-        {"Test_ID": "TC05", "Category": "Hỏi thuật toán", "Input": "phương pháp quay lui là gì", "Socratic_Compliant": "YES", "Latency_Sec": 1.85, "Anti_Leak": "PASSED"},
-        {"Test_ID": "TC06", "Category": "Kích hoạt EWS", "Input": "thử sai lần 3", "Socratic_Compliant": "YES", "Latency_Sec": 0.75, "Anti_Leak": "PASSED"},
-        {"Test_ID": "TC07", "Category": "Thụt lề sai", "Input": "for i in range(5):\nprint(i)", "Socratic_Compliant": "YES", "Latency_Sec": 0.88, "Anti_Leak": "PASSED"},
-        {"Test_ID": "TC08", "Category": "Thiếu hai chấm", "Input": "while n > 0\n  n -= 1", "Socratic_Compliant": "YES", "Latency_Sec": 0.81, "Anti_Leak": "PASSED"},
-        {"Test_ID": "TC09", "Category": "Chặn ngôn từ xấu", "Input": "từ ngữ thô tục vi phạm", "Socratic_Compliant": "YES", "Latency_Sec": 0.65, "Anti_Leak": "PASSED"},
-        {"Test_ID": "TC10", "Category": "Duyệt List", "Input": "A = [1,2,3]; for x in A print(x)", "Socratic_Compliant": "YES", "Latency_Sec": 0.95, "Anti_Leak": "PASSED"}
-    ]).to_csv(bench_file, index=False)
+st.set_page_config(
+    page_title="EduCoder 10 - Lập trình Tin học 10",
+    page_icon="💻",
+    layout="wide"
+)
 
-if "auth_user" not in st.session_state:
-    st.session_state.auth_user = None
-if "nav_page" not in st.session_state:
-    st.session_state.nav_page = "🏠 Trang chủ"
-if "chat_msgs" not in st.session_state:
-    st.session_state.chat_msgs = []
-if "force_theory" not in st.session_state:
-    st.session_state.force_theory = False
-if "sel_ch" not in st.session_state:
-    st.session_state.sel_ch = "c1"
-if "sel_ex_idx" not in st.session_state:
-    st.session_state.sel_ex_idx = 0
-
+# Tùy chỉnh CSS giao diện hiện đại, chống tràn chữ
 st.markdown("""
 <style>
-    .upcoder-nav { background-color: #0074A6; padding: 12px 20px; color: white; border-radius: 6px 6px 0 0; font-size: 20px; font-weight: bold; }
-    .custom-card { background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 6px; padding: 14px; margin-bottom: 12px; }
-    .card-title { color: #0074A6; font-weight: bold; font-size: 15px; margin-bottom: 8px; }
+    .main-header {
+        background: linear-gradient(90deg, #006699 0%, #0099cc 100%);
+        padding: 14px 22px;
+        border-radius: 8px;
+        color: white;
+        margin-bottom: 18px;
+        font-size: 20px;
+        font-weight: bold;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .custom-card { 
+        background-color: rgba(128, 128, 128, 0.08) !important; 
+        border: 1px solid rgba(128, 128, 128, 0.25) !important; 
+        border-radius: 8px; 
+        padding: 18px 22px; 
+        margin-bottom: 14px; 
+        box-sizing: border-box !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+    }
+    .card-title {
+        font-size: 17px;
+        font-weight: bold;
+        color: #0074A6;
+        margin-bottom: 10px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-user = st.session_state.auth_user
-user_tag = f"👤 {user['full_name']} ({'GV' if user['role']=='teacher' else user['class_name']})" if user else "🔑 Đăng Nhập"
+# Khởi tạo trạng thái phiên làm việc (Session State)
+if "user" not in st.session_state:
+    st.session_state.user = None
+if "nav_page" not in st.session_state:
+    st.session_state.nav_page = "🏠 Trang chủ"
+if "active_exercise" not in st.session_state:
+    st.session_state.active_exercise = CURRICULUM_EXERCISES["c1"][0]
+if "active_ch" not in st.session_state:
+    st.session_state.active_ch = "c1"
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "last_verdict" not in st.session_state:
+    st.session_state.last_verdict = None
 
-st.markdown('<div class="upcoder-nav">💻 EDUCODER 10 - CỔNG THỰC HÀNH LẬP TRÌNH & TRỢ LÝ TIN HỌC 10 (GDPT 2018)</div>', unsafe_allow_html=True)
+# ==============================================================================
+# KHU VỰC CHƯA ĐĂNG NHẬP (ĐĂNG NHẬP & QUÊN MẬT KHẨU)
+# ==============================================================================
+if not st.session_state.user:
+    st.markdown('<div class="main-header">💻 EDUCODER 10 - HỆ THỐNG LUYỆN LẬP TRÌNH TIN HỌC 10 (GDPT 2018)</div>', unsafe_allow_html=True)
+    tab_login, tab_forgot = st.tabs(["Đăng Nhập", "Quên Mật Khẩu"])
 
-nav_list = ["🏠 Trang chủ", "📖 Lý thuyết SGK", "📝 Kho 300 Bài tập", "💬 Không gian Socratic", "📊 Báo cáo Benchmark", user_tag]
-current_selection = st.radio(
-    "Navigation:",
-    options=nav_list,
+    with tab_login:
+        col_l1, col_l2 = st.columns([1.2, 1])
+        with col_l1:
+            u_acc = st.text_input("Tài khoản (mã học sinh ví dụ: 10a1_01 hoặc Gmail):", key="login_acc")
+            u_pwd = st.text_input("Mật khẩu:", type="password", key="login_pwd")
+            if st.button("Đăng Nhập", type="primary", use_container_width=True):
+                if not u_acc or not u_pwd:
+                    st.warning("Vui lòng điền đầy đủ tài khoản và mật khẩu.")
+                else:
+                    user_data, msg = authenticate_user(u_acc, u_pwd)
+                    if user_data:
+                        st.session_state.user = user_data
+                        st.session_state.nav_page = "🏠 Trang chủ"
+                        st.success(msg)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+        with col_l2:
+            st.info("""
+            **Quy ước tài khoản học sinh:**
+            - **Mã học sinh:** Từ lớp 10A1 đến 10A10 (ví dụ: `10a1_01`, `10a5_10`, `10a10_45`).
+            - **Mật khẩu mặc định ban đầu:** `123456`
+            - Giáo viên đăng nhập trực tiếp bằng Gmail cá nhân.
+            """)
+
+    with tab_forgot:
+        st.markdown("##### Khôi phục mật khẩu tài khoản")
+        f_step = st.radio("Chọn thao tác:", ["1. Yêu cầu gửi mã OTP", "2. Đặt lại mật khẩu bằng OTP"], horizontal=True)
+        if "1." in f_step:
+            f_target = st.text_input("Nhập tài khoản hoặc Email đã đăng ký:", key="fg_acc")
+            if st.button("Gửi mã OTP xác nhận", type="primary"):
+                if not f_target:
+                    st.warning("Vui lòng nhập tài khoản hoặc email.")
+                else:
+                    otp, dest, send_msg = generate_forgot_otp(f_target)
+                    if otp:
+                        st.success(f"✅ {send_msg}")
+                    else:
+                        st.error(send_msg)
+        else:
+            col_r1, col_r2 = st.columns(2)
+            with col_r1:
+                r_target = st.text_input("Tài khoản hoặc Email:", key="rst_acc")
+                r_otp = st.text_input("Mã OTP 6 số:", key="rst_otp")
+            with col_r2:
+                r_new_pw = st.text_input("Mật khẩu mới:", type="password", key="rst_npw")
+                r_cf_pw = st.text_input("Xác nhận mật khẩu mới:", type="password", key="rst_cpw")
+            if st.button("Xác nhận đổi mật khẩu", type="primary"):
+                if r_new_pw != r_cf_pw:
+                    st.error("Mật khẩu xác nhận không khớp.")
+                elif len(r_new_pw) < 6:
+                    st.warning("Mật khẩu mới phải có ít nhất 6 ký tự.")
+                else:
+                    ok, msg = reset_password_with_otp(r_target, r_otp, r_new_pw)
+                    if ok:
+                        st.success(msg)
+                        st.info("Vui lòng quay lại tab 'Đăng Nhập' để tiếp tục.")
+                    else:
+                        st.error(msg)
+    st.stop()
+
+# ==============================================================================
+# KHU VỰC ĐÃ ĐĂNG NHẬP (PHÂN QUYỀN RBAC)
+# ==============================================================================
+user = st.session_state.user
+is_teacher = (user["role"] == "teacher")
+
+# Định danh vai trò trên thanh Navbar
+if user:
+    if is_teacher:
+        clean_name = user['full_name'].replace("Thầy/Cô", "").replace("Cô", "").replace("Thầy", "").strip()
+        user_tag = f"👨‍🏫 Thầy/Cô {clean_name}" if clean_name else "👨‍🏫 Thầy/Cô Giáo viên"
+    else:
+        user_tag = f"👤 {user['full_name']} ({user['class_name']})"
+
+# Danh sách trang điều hướng
+nav_options = ["🏠 Trang chủ", "📖 Lý thuyết SGK", "📝 Kho Bài Tập Python", "💬 Trợ lý học tập AI"]
+if is_teacher:
+    nav_options.append("📊 Báo cáo Benchmark")
+nav_options.append(user_tag)
+
+# Đồng bộ nếu tab hiện tại không có trong danh sách
+if st.session_state.nav_page not in nav_options:
+    st.session_state.nav_page = "🏠 Trang chủ"
+
+st.markdown('<div class="main-header">💻 EDUCODER 10 - HỆ THỐNG LUYỆN LẬP TRÌNH VÀ TRỢ LÝ TIN HỌC 10 (GDPT 2018)</div>', unsafe_allow_html=True)
+
+selected_nav = st.radio(
+    "Điều hướng:",
+    options=nav_options,
+    index=nav_options.index(st.session_state.nav_page),
     horizontal=True,
-    label_visibility="collapsed",
-    index=nav_list.index(st.session_state.nav_page) if st.session_state.nav_page in nav_list else 0
+    label_visibility="collapsed"
 )
-
-if current_selection != st.session_state.nav_page:
-    st.session_state.nav_page = current_selection
+if selected_nav != st.session_state.nav_page:
+    st.session_state.nav_page = selected_nav
     st.rerun()
-
-st.write("")
 
 # ----------------- 1. TRANG CHỦ -----------------
 if st.session_state.nav_page == "🏠 Trang chủ":
-    c1, c2 = st.columns([2, 1.2])
-    with c1:
-        st.markdown("### Hệ Thống Luyện Lập Trình & Trợ Lý Học Thuật Tin Học 10")
-        st.write("""
-        Hệ thống hỗ trợ học sinh thực hành lập trình theo phương pháp Socratic, tích hợp giám sát liêm chính và can thiệp sư phạm sớm (EWS):
-        * **Kho học liệu:** 6 chuyên đề lý thuyết SGK cốt lõi và **300 bài tập** thực hành chuẩn hóa (50 bài/chương).
-        * **Trợ lý AI Socratic Agentic RAG:** Bắt lỗi cú pháp, kiểm tra kiểu dữ liệu và hướng dẫn tư duy mà không cung cấp lời giải làm sẵn.
-        * **Bảo mật học vụ:** 3 tài khoản Giáo viên (Email cá nhân), 400 tài khoản Học sinh, hỗ trợ đổi và quên mật khẩu bằng mã OTP.
-        """)
-        if not user:
-            st.info("👉 Nhấp vào mục **Đăng Nhập** trên thanh menu để bắt đầu làm việc.")
-    with c2:
-        st.markdown('<div class="custom-card"><div class="card-title">📌 THỐNG KÊ HỆ THỐNG</div>'
-                    '• Giáo viên bộ môn: 03 tài khoản email thực tế<br>'
-                    '• Học sinh: 400 tài khoản (10 lớp từ 10A1 - 10A10)<br>'
-                    '• Bài tập: 300 bài (50 bài x 6 chương)<br>'
-                    '• Cơ chế EWS: Tự động phát hiện bế tắc nhận thức'
-                    '</div>', unsafe_allow_html=True)
+    col_h1, col_h2 = st.columns([2.2, 1])
+    with col_h1:
+        if is_teacher:
+            clean_teacher_name = user['full_name'].replace("Thầy/Cô", "").replace("Cô", "").replace("Thầy", "").strip()
+            display_teacher_name = clean_teacher_name if clean_teacher_name else "Giáo viên"
+
+            st.markdown(f"### Kính chào Thầy/Cô {display_teacher_name}!")
+            st.markdown("**Đơn vị:** Tổ Tin Học | **Vai trò:** Quản trị & Giảng dạy Bộ môn")
+            st.success("👨‍🏫 **Trạng thái:** Hệ thống phân quyền Giáo viên sẵn sàng. Thầy/Cô có thể vào duyệt Kho bài tập, chạy thử bộ Testcases hoặc theo dõi tiến độ lớp học qua Báo cáo Benchmark.")
+        else:
+            st.markdown(f"### Chào mừng bạn {user['full_name']}!")
+            st.markdown(f"**Lớp:** {user['class_name']} | **Vai trò:** Học sinh")
+            st.info("💻 **Trạng thái:** Tài khoản hoạt động bình thường. Em hãy chọn bài tập để bắt đầu rèn luyện lập trình nhé!")
+
+        st.write("")
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            if st.button("📖 Đọc Lý thuyết SGK", use_container_width=True):
+                st.session_state.nav_page = "📖 Lý thuyết SGK"
+                st.rerun()
+        with btn_col2:
+            if st.button("📝 Vào Kho Bài Tập Python", use_container_width=True):
+                st.session_state.nav_page = "📝 Kho Bài Tập Python"
+                st.rerun()
+
+    with col_h2:
+        with st.container(border=True):
+            st.markdown("#### 📌 THÔNG TIN HỌC VỤ KHỐI 10")
+            st.markdown("""
+            - **Chương trình:** SGK Tin học 10 (Chủ đề 5 - Lập trình Python).
+            - **Quy chế chấm điểm:** Điểm được lưu tự động trên thang 10.
+            - **Liêm chính học thuật:** Trợ lý Socratic chỉ gợi mở phương pháp, không cho full code giải sẵn.
+            """)
 
 # ----------------- 2. LÝ THUYẾT SGK TIN HỌC 10 -----------------
 elif st.session_state.nav_page == "📖 Lý thuyết SGK":
-    st.subheader("📖 CỐT LÕI KIẾN THỨC CHỦ ĐỀ 5 SGK TIN HỌC 10 (BGD&ĐT)")
-    ch_picked = st.selectbox("Chọn chuyên đề học tập:", list(SGK_CURRICULUM.keys()), format_func=lambda x: SGK_CURRICULUM[x]["name"])
-    st.markdown(f'<div class="custom-card">{SGK_CURRICULUM[ch_picked]["content"]}</div>', unsafe_allow_html=True)
+    st.markdown("### CỐT LÕI KIẾN THỨC SGK TIN HỌC 10")
+    lesson_keys = list(SGK_CURRICULUM.keys())
+    selected_lesson_key = st.selectbox(
+        "Chọn bài học:",
+        options=lesson_keys,
+        format_func=lambda k: SGK_CURRICULUM[k]["name"]
+    )
+    lesson_data = SGK_CURRICULUM[selected_lesson_key]
+    st.write("")
+    with st.container(border=True):
+        st.markdown(f'<div class="card-title">📘 {lesson_data["name"]}</div>', unsafe_allow_html=True)
+        st.markdown(lesson_data["content"])
 
-# ----------------- 3. KHO 300 BÀI TẬP PHÂN HÓA -----------------
-elif st.session_state.nav_page == "📝 Kho 300 Bài tập":
-    st.subheader("📚 KHO 300 BÀI TẬP LẬP TRÌNH PYTHON 10 (50 BÀI / CHƯƠNG)")
+# ----------------- 3. KHO BÀI TẬP PYTHON -----------------
+elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
+    st.markdown("### KHO BÀI TẬP PYTHON")
     col_k1, col_k2 = st.columns([1.2, 2.5])
+
+    ch_keys = list(CURRICULUM_EXERCISES.keys())
     with col_k1:
-        st.session_state.sel_ch = st.selectbox("Chọn chương kiến thức:", list(CURRICULUM_EXERCISES.keys()), format_func=lambda x: SGK_CURRICULUM[x]["name"])
-        ch_exs = CURRICULUM_EXERCISES[st.session_state.sel_ch]
-        lvl_filter = st.radio("Lọc theo mức độ nhận thức:", ["Tất cả", "Nhận biết", "Thông hiểu", "Vận dụng", "Vận dụng cao"], horizontal=True)
-        filtered = [e for e in ch_exs if lvl_filter == "Tất cả" or e["level"] == lvl_filter]
-        chosen_ex = st.selectbox("Chọn bài tập:", filtered, format_func=lambda x: f"[{x['code']}] {x['title']}")
-        st.session_state.sel_ex_idx = ch_exs.index(chosen_ex)
+        chosen_ch = st.selectbox(
+            "Chọn chương kiến thức:",
+            options=ch_keys,
+            format_func=lambda x: CHAPTER_NAMES.get(x, f"Chương {x.replace('c','')}")
+        )
+        exercises = CURRICULUM_EXERCISES.get(chosen_ch, [])
+        lvl = st.radio("Mức độ nhận thức:", ["Tất cả", "Nhận biết", "Thông hiểu", "Vận dụng", "Vận dụng cao"], horizontal=True)
+        filtered_ex = [e for e in exercises if lvl == "Tất cả" or e.get("level") == lvl]
 
     with col_k2:
-        st.markdown(f'<div class="custom-card">'
-                    f'<div class="card-title">📄 ĐỀ BÀI: {chosen_ex["title"]}</div>'
-                    f'<b>Mã bài tập:</b> `{chosen_ex["code"]}` | <b>Mức độ:</b> {chosen_ex["level"]}<br><br>'
-                    f'<b>Nhiệm vụ:</b><br>{chosen_ex["problem"]}<br><br>'
-                    f'<b>Gợi ý sư phạm:</b><br>{chosen_ex["hint"]}'
-                    f'</div>', unsafe_allow_html=True)
-        if st.button("🚀 Làm bài này trong Không gian Socratic"):
-            st.session_state.nav_page = "💬 Không gian Socratic"
-            st.rerun()
+        if not filtered_ex:
+            st.warning("⚠️ Hiện chưa có bài tập nào ở mức độ này trong chương đã chọn.")
+        else:
+            with col_k1:
+                selected_ex = st.selectbox(
+                    "Chọn bài thực hành:",
+                    options=filtered_ex,
+                    format_func=lambda x: f"[{x['code']}] {x['title']}"
+                )
 
-# ----------------- 4. KHÔNG GIAN THỰC HÀNH SOCRATIC -----------------
-elif st.session_state.nav_page == "💬 Không gian Socratic":
-    if not user:
-        st.warning("⚠️ Em cần đăng nhập tài khoản học sinh để làm bài và ghi nhận kết quả.")
-        if st.button("Chuyển tới trang Đăng nhập"):
-            st.session_state.nav_page = user_tag
-            st.rerun()
-    else:
-        default_ch = list(CURRICULUM_EXERCISES.keys())[0] if CURRICULUM_EXERCISES else "c1"
-        active_ch = st.session_state.get("sel_ch", default_ch)
-        ex_list = CURRICULUM_EXERCISES.get(active_ch, list(CURRICULUM_EXERCISES.values())[0] if CURRICULUM_EXERCISES else [{}])
-        active_idx = st.session_state.get("sel_ex_idx", 0)
-        active_ex = ex_list[active_idx] if active_idx < len(ex_list) else ex_list[0]
-        
-        u_info = get_user_by_account_id(user["account_id"])
-        
-        c_left, c_chat = st.columns([1.1, 2.2])
-        with c_left:
-            st.markdown(f'<div class="custom-card">'
-                        f'<div class="card-title">🎯 BÀI TẬP HIỆN TẠI</div>'
-                        f'<b>{active_ex.get("title", "")}</b> ({active_ex.get("level", "")})<br>'
-                        f'<small>{active_ex.get("problem", "")}</small><br><hr>'
-                        f'<b>Cảnh báo nề nếp:</b> {u_info["strikes"]}/3<br>'
-                        f'<b>Thử sai liên tiếp:</b> {u_info["wrong_attempts"]}/3'
-                        f'</div>', unsafe_allow_html=True)
-            
-            if st.session_state.force_theory:
-                with st.expander("📖 CỦNG CỐ LÝ THUYẾT BẮT BUỘC (EWS)", expanded=True):
-                    st.markdown(SGK_CURRICULUM.get(active_ch, {}).get("content", ""))
-                    if st.button("Em đã nắm vững, mở lại bài tập"):
-                        st.session_state.force_theory = False
-                        update_user_status(user["account_id"], u_info["strikes"], 0, False, "Bình thường")
-                        st.rerun()
+            if selected_ex:
+                u_target = user.get("account_id") or user.get("email")
+                high_sc = get_student_highest_score(u_target, selected_ex["code"]) if not is_teacher else 10.0
+                score_badge = "<b>Chế độ:</b> Giáo viên xem trước & kiểm thử" if is_teacher else f"<b>Điểm cao nhất của bạn:</b> {high_sc}/10"
 
-        with c_chat:
-            st.markdown("### 💬 Trợ Lý Socratic Sư Phạm (Agentic RAG)")
-            st.caption("Trợ lý phân tích lỗi cú pháp, gợi ý giải thuật từng bước. Tuyệt đối không cung cấp code giải hộ.")
+                st.markdown(f"""
+                <div class="custom-card">
+                    <div class="card-title">📄 {selected_ex['title']} ({selected_ex['level']})</div>
+                    <b>Mã bài:</b> <code>{selected_ex['code']}</code> | {score_badge}<br><br>
+                    <b>Yêu cầu đề bài:</b><br>{selected_ex['problem']}<br><br>
+                    <b>Gợi ý:</b><br>{selected_ex['hint']}
+                </div>
+                """, unsafe_allow_html=True)
 
-            for m in st.session_state.chat_msgs:
-                with st.chat_message(m["role"]):
-                    st.markdown(m["content"])
-
-            if u_info["is_locked"]:
-                st.error("🚫 Tài khoản đã bị đình chỉ do vi phạm quy chế 3 lần. Vui lòng gặp Giáo viên bộ môn.")
-            elif st.session_state.force_theory:
-                st.warning("Em cần đọc phần Củng cố lý thuyết bắt buộc ở cột bên trái trước khi tiếp tục gửi code.")
-            else:
-                input_str = st.chat_input("Nhập code giải thử nghiệm hoặc đặt câu hỏi thuật toán/quy chế...")
-                if input_str:
-                    st.session_state.chat_msgs.append({"role": "user", "content": input_str})
-                    res = process_agentic_workflow(input_str, active_ch, active_ex, u_info["strikes"], u_info["wrong_attempts"])
-                    update_user_status(
-                        user["account_id"],
-                        res["strikes"],
-                        res["wrong"],
-                        res["is_locked"],
-                        "ĐÃ KHÓA" if res["is_locked"] else ("Bế tắc (EWS)" if res["force_theory"] else "Bình thường")
-                    )
-                    st.session_state.force_theory = res["force_theory"]
-                    st.session_state.chat_msgs.append({"role": "assistant", "content": res["reply"]})
+                btn_label = "🚀 Chạy thử bài tập với Trợ lý AI" if is_teacher else "🚀 Bắt đầu làm bài với Trợ lý AI"
+                if st.button(btn_label, type="primary"):
+                    st.session_state.active_exercise = selected_ex
+                    st.session_state.active_ch = chosen_ch
+                    st.session_state.nav_page = "💬 Trợ lý học tập AI"
                     st.rerun()
 
-# ----------------- 5. BÁO CÁO BENCHMARK -----------------
-elif st.session_state.nav_page == "📊 Báo cáo Benchmark":
-    st.subheader("📊 BÁO CÁO ĐÁNH GIÁ ĐỊNH LƯỢNG & TÍNH KHẢ THI (BENCHMARK EVALUATION)")
-    st.caption("Căn cứ đánh giá hiệu quả Agentic RAG trên tập kiểm thử 10 ca điển hình K-12 Python")
-    if bench_file.exists():
-        df_bench = pd.read_csv(bench_file)
-        b1, b2, b3, b4 = st.columns(4)
-        b1.metric("Tổng ca kiểm thử", len(df_bench))
-        b2.metric("Tuân thủ gợi mở Socratic", "100%")
-        b3.metric("Thời gian phản hồi TB", f"{df_bench['Latency_Sec'].mean():.2f}s")
-        b4.metric("Chặn rò rỉ Full Code", "100%")
-        st.dataframe(df_bench, use_container_width=True)
-        st.bar_chart(df_bench, x="Category", y="Latency_Sec")
+# ----------------- 4. KHÔNG GIAN LÀM BÀI & TRỢ LÝ AI -----------------
+elif st.session_state.nav_page == "💬 Trợ lý học tập AI":
+    active_ex = st.session_state.active_exercise
+    if not active_ex:
+        st.session_state.active_exercise = CURRICULUM_EXERCISES["c1"][0]
+        active_ex = st.session_state.active_exercise
 
-# ----------------- 6. ĐĂNG NHẬP, ĐỔI MẬT KHẨU & QUẢN TRỊ -----------------
-else:
-    if not user:
-        st.subheader("🔑 CỔNG ĐĂNG NHẬP & PHỤC HỒI TÀI KHOẢN")
-        tab_log, tab_fgt, tab_info = st.tabs(["Đăng Nhập", "Quên Mật Khẩu", "Danh Sách Tài Khoản Mẫu"])
-        
-        with tab_log:
-            with st.form("login_f"):
-                u_id = st.text_input("Tài khoản hoặc Email cá nhân:", placeholder="GV: gv_nam@thpt-nguyentrungtruc.edu.vn | HS: 10a1_01")
-                p_in = st.text_input("Mật khẩu:", type="password", placeholder="Nhập mật khẩu (Mặc định: 123456)")
-                if st.form_submit_button("Đăng Nhập", use_container_width=True):
-                    auth = authenticate_user(u_id, p_in)
-                    if auth:
-                        st.session_state.auth_user = auth
-                        st.session_state.chat_msgs = [{
-                            "role": "assistant",
-                            "content": f"Kính chào Thầy/Cô {auth['full_name']}!" if auth['role']=='teacher' else f"Chào bạn {auth['full_name']} ({auth['class_name']})! Chúc em có buổi học tập hiệu quả."
-                        }]
-                        st.session_state.nav_page = "📝 Kho 300 Bài tập"
-                        st.rerun()
-                    else:
-                        st.error("Tài khoản hoặc mật khẩu không chính xác.")
+    # KIỂM TRA TRẠNG THÁI KHÓA TÀI KHOẢN DO VI PHẠM KỶ LUẬT
+    if user.get("is_locked") == 1:
+        st.error("🚫 **TÀI KHOẢN CỦA EM ĐÃ BỊ KHÓA DO VI PHẠM KỶ LUẬT PHÁT NGÔN 3 LẦN!**")
+        st.warning("Toàn bộ quyền làm bài, nộp bài và sử dụng Trợ lý AI đã bị đình chỉ. Em hãy liên hệ Thầy/Cô bộ môn Tin học để được xem xét mở lại tài khoản.")
+        st.stop()
 
-        with tab_fgt:
-            st.markdown("#### Khôi Phục Mật Khẩu Bằng Mã OTP")
-            step = st.radio("Thao tác:", ["1. Lấy mã xác thực OTP", "2. Đặt mật khẩu mới"], horizontal=True)
-            if "1." in step:
-                acc_to_reset = st.text_input("Nhập Email cá nhân hoặc Mã tài khoản:")
-                if st.button("Gửi mã OTP"):
-                    otp_code, email_dest = generate_forgot_otp(acc_to_reset)
-                    if otp_code:
-                        st.success(f"Mã OTP đã được gửi đến: `{email_dest}`\n\n**Mã xác nhận (Demo hiển thị trực tiếp): `{otp_code}`**")
-                    else:
-                        st.error(email_dest)
-            else:
-                acc_confirm = st.text_input("Mã tài khoản / Email:")
-                otp_in = st.text_input("Nhập mã OTP 6 chữ số:")
-                pw_new = st.text_input("Nhập mật khẩu mới:", type="password")
-                if st.button("Đổi mật khẩu ngay"):
-                    ok, msg = reset_password_with_otp(acc_confirm, otp_in, pw_new)
-                    if ok:
-                        st.success(msg)
-                    else:
-                        st.error(msg)
-
-        with tab_info:
-            st.info("""
-            * **03 Tài khoản Giáo viên (Email thực tế):**
-              - `gv_nam@thpt-nguyentrungtruc.edu.vn` (Mật khẩu: `123456`)
-              - `huong.le.informatics@gmail.com` (Mật khẩu: `123456`)
-              - `tranminhduc.tin10@gmail.com` (Mật khẩu: `123456`)
-            * **400 Tài khoản Học sinh:**
-              - Cú pháp: `10a1_01` đến `10a1_40`, `10a2_01` đến `10a10_40` (Mật khẩu: `123456`)
-            """)
+    st.markdown(f"### 💻 LÀM BÀI: [{active_ex['code']}] {active_ex['title']}")
+    if is_teacher:
+        st.caption("💡 Chế độ Giáo viên: Thầy/Cô có thể chạy thử mã nguồn hoặc trải nghiệm tư vấn Socratic của Trợ lý AI.")
     else:
-        st.subheader(f"👤 HỒ SƠ CÁ NHÂN: {user['full_name']}")
-        st.write(f"**Vai trò:** {'👨‍🏫 Giáo viên' if user['role']=='teacher' else '🎓 Học sinh'} | **Đơn vị:** {user['class_name']}")
-        tab_prof, tab_pw, tab_adm = st.tabs(["Thông Tin", "Đổi Mật Khẩu", "Bảng Quản Trị Giáo Viên" if user['role']=='teacher' else "Tiến Độ Cá Nhân"])
-        
-        with tab_prof:
-            st.write(f"- Mã định danh: `{user['account_id']}`")
-            st.write(f"- Email: `{user['email']}`")
-            if st.button("🚪 Đăng xuất"):
-                st.session_state.auth_user = None
-                st.session_state.nav_page = "🏠 Trang chủ"
-                st.session_state.chat_msgs = []
+        st.caption("💡 Hãy tự suy nghĩ thuật toán. Trợ lý Socratic sẽ hướng dẫn tư duy từng bước mà không giải hộ.")
+
+    col_work, col_chat = st.columns([1.3, 1.2])
+
+    with col_work:
+        st.markdown(f"""
+        <div class="custom-card">
+            <div class="card-title">🎯 ĐỀ BÀI: {active_ex['title']} ({active_ex['level']})</div>
+            {active_ex['problem']}<br><br>
+            <b>💡 Gợi ý:</b> {active_ex['hint']}
+        </div>
+        """, unsafe_allow_html=True)
+
+        student_code = st.text_area(
+            "Trình soạn thảo mã nguồn Python:",
+            height=260,
+            value=f"# Viết mã nguồn cho bài {active_ex['code']}\n",
+            key=f"editor_{active_ex['code']}"
+        )
+
+        if st.button("🚀 Nộp bài & Chấm điểm", type="primary", use_container_width=True):
+            with st.spinner("Hệ thống sandbox đang chạy qua các Testcases..."):
+                judge_res = grade_code(student_code, active_ex.get("testcases_json", "[]"))
+                st.session_state.last_verdict = judge_res
+
+            # Lưu vào cơ sở dữ liệu nếu là học sinh
+            u_target = user.get("account_id") or user.get("email")
+            save_submission(
+                account_id=u_target,
+                exercise_id=active_ex["code"],
+                score=judge_res["score"],
+                status=judge_res["status"],
+                code=student_code
+            )
+
+            if judge_res["verdict"] == "AC":
+                st.success(f"🎉 ACCEPTED (AC): {judge_res['score']}/10 Điểm!")
+            else:
+                st.error(f"❌ {judge_res['status']}: {judge_res['score']}/10 Điểm")
+                st.code(judge_res["details"])
+                if judge_res["failed_line"]:
+                    st.warning(f"⚠️ Phát hiện dòng lệnh nghi vấn gây lỗi: Dòng số {judge_res['failed_line']}")
+
+                # Tự động tạo phân tích Socratic khi làm sai
+                ctx = {
+                    "title": active_ex["title"],
+                    "problem": active_ex["problem"],
+                    "student_code": student_code,
+                    "verdict": judge_res["verdict"],
+                    "judge_details": judge_res["details"],
+                    "failed_line": judge_res["failed_line"]
+                }
+                ai_advice = get_gemini_socratic_response("Hãy giúp phân tích lỗi sai và đặt câu hỏi gợi mở Socratic.", ctx)
+                st.session_state.chat_history.append({"role": "assistant", "content": ai_advice})
+
+    with col_chat:
+        with st.container(border=True):
+            chat_head_c1, chat_head_c2 = st.columns([2, 1])
+            with chat_head_c1:
+                st.markdown("#### 🤖 Trợ lý Socratic AI")
+            with chat_head_c2:
+                if st.button("🗑️ Xóa chat", use_container_width=True):
+                    st.session_state.chat_history = []
+                    st.rerun()
+
+            chat_container = st.container(height=350)
+            for msg in st.session_state.chat_history:
+                with chat_container.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+
+            user_q = st.chat_input("Hỏi AI phương pháp giải hoặc nguyên lý...")
+            if user_q:
+                st.session_state.chat_history.append({"role": "user", "content": user_q})
+                ctx = {
+                    "title": active_ex["title"],
+                    "problem": active_ex["problem"],
+                    "student_code": student_code,
+                    "verdict": st.session_state.last_verdict.get("verdict", "N/A") if st.session_state.last_verdict else "N/A",
+                    "judge_details": st.session_state.last_verdict.get("details", "") if st.session_state.last_verdict else "",
+                    "failed_line": st.session_state.last_verdict.get("failed_line", None) if st.session_state.last_verdict else None
+                }
+                ai_reply = get_gemini_socratic_response(user_q, ctx)
+                st.session_state.chat_history.append({"role": "assistant", "content": ai_reply})
                 st.rerun()
 
-        with tab_pw:
-            st.markdown("#### Cập Nhật Mật Khẩu Cá Nhân")
-            with st.form("form_pw_change"):
-                cur_p = st.text_input("Mật khẩu hiện tại:", type="password")
-                n_p1 = st.text_input("Mật khẩu mới:", type="password")
-                n_p2 = st.text_input("Xác nhận mật khẩu mới:", type="password")
-                if st.form_submit_button("Lưu Mật Khẩu Mới"):
-                    if n_p1 != n_p2:
+# ----------------- 5. BÁO CÁO BENCHMARK (DÀNH CHO GIÁO VIÊN) -----------------
+elif st.session_state.nav_page == "📊 Báo cáo Benchmark" and is_teacher:
+    st.markdown("### 📊 BÁO CÁO BENCHMARK & THEO DÕI HỌC TẬP")
+    conn = get_connection()
+    df_users = pd.read_sql_query("SELECT account_id, full_name, class_name, status, is_locked FROM users WHERE role = 'student'", conn)
+    df_subs = pd.read_sql_query("SELECT account_id, exercise_id, score, status, created_at FROM submissions", conn)
+    conn.close()
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Tổng số học sinh quản lý", len(df_users))
+    m2.metric("Tổng lượt chấm tự động", len(df_subs))
+    ac_subs = len(df_subs[df_subs["status"].str.contains("Accepted|AC", case=False, na=False)]) if not df_subs.empty else 0
+    m3.metric("Tỷ lệ bài làm đạt AC", f"{(ac_subs / len(df_subs) * 100):.1f}%" if len(df_subs) > 0 else "0%")
+
+    st.write("")
+    st.markdown("##### 📋 Danh sách học sinh theo khối")
+    st.dataframe(df_users, use_container_width=True)
+
+# ----------------- 6. HỒ SƠ CÁ NHÂN & ĐỔI MẬT KHẨU -----------------
+elif st.session_state.nav_page == user_tag:
+    if not is_teacher:
+        st.markdown(f"### 👤 HỒ SƠ HỌC SINH: {user['full_name']}")
+        col_p1, col_p2 = st.columns([1.1, 1.2])
+        with col_p1:
+            with st.container(border=True):
+                st.markdown("#### 📋 Thông tin cá nhân")
+                st.write(f"**Mã học sinh:** `{user['account_id']}`")
+                st.write(f"**Họ và tên:** **{user['full_name']}**")
+                st.write(f"**Lớp học:** {user['class_name']}")
+                st.write(f"**Trạng thái:** {user.get('status', 'Bình thường')}")
+                st.caption("ℹ️ Họ và tên được cố định theo hồ sơ danh sách lớp học của nhà trường.")
+
+        with col_p2:
+            with st.container(border=True):
+                st.markdown("#### 🔑 Đổi mật khẩu học sinh")
+                curr_pw = st.text_input("Mật khẩu hiện tại:", type="password", key="std_cpw")
+                new_pw = st.text_input("Mật khẩu mới:", type="password", key="std_npw")
+                cf_pw = st.text_input("Xác nhận mật khẩu mới:", type="password", key="std_cf_pw")
+                if st.button("Cập nhật mật khẩu", type="primary", use_container_width=True):
+                    if not curr_pw or not new_pw:
+                        st.warning("Vui lòng điền đầy đủ các ô.")
+                    elif new_pw != cf_pw:
                         st.error("Mật khẩu xác nhận không khớp.")
-                    elif len(n_p1) < 6:
-                        st.warning("Mật khẩu phải từ 6 ký tự trở lên.")
+                    elif len(new_pw) < 6:
+                        st.warning("Mật khẩu mới phải có ít nhất 6 ký tự.")
                     else:
-                        ok, msg = change_user_password(user["account_id"], cur_p, n_p1)
+                        ok, msg = change_user_password(user["account_id"], curr_pw, new_pw)
+                        if ok:
+                            st.success(msg)
+                        else:
+                            st.error(msg)
+    else:
+        clean_name = user['full_name'].replace("Thầy/Cô", "").replace("Cô", "").replace("Thầy", "").strip()
+        display_name = clean_name if clean_name else "Giáo viên"
+
+        st.markdown(f"### ⚙️ QUẢN TRỊ VIÊN & GIÁO VIÊN: {display_name}")
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            with st.container(border=True):
+                st.markdown("#### 📋 Thông tin giảng dạy")
+                st.write(f"**Email tài khoản:** `{user['email']}`")
+                st.write(f"**Họ tên Giáo viên:** {display_name}")
+                st.write(f"**Đơn vị phụ trách:** {user.get('class_name', 'Tổ Tin Học')}")
+
+        with col_t2:
+            with st.container(border=True):
+                st.markdown("#### 🔑 Đổi mật khẩu Giáo viên")
+                t_curr_pw = st.text_input("Mật khẩu hiện tại:", type="password", key="gv_cpw")
+                t_new_pw = st.text_input("Mật khẩu mới:", type="password", key="gv_npw")
+                t_cf_pw = st.text_input("Xác nhận mật khẩu:", type="password", key="gv_cf_pw")
+                if st.button("Cập nhật mật khẩu Thầy/Cô", type="primary", use_container_width=True):
+                    if t_new_pw != t_cf_pw:
+                        st.error("Mật khẩu xác nhận không trùng khớp.")
+                    else:
+                        ok, msg = change_user_password(user["email"], t_curr_pw, t_new_pw)
                         if ok:
                             st.success(msg)
                         else:
                             st.error(msg)
 
-        with tab_adm:
-            if user['role'] == 'teacher':
-                st.markdown("#### Quản Trị 400 Học Sinh Khối 10")
-                conn = get_connection()
-                df_st = pd.read_sql_query("SELECT account_id, full_name, class_name, strikes, wrong_attempts, is_locked, ews_status FROM users WHERE role = 'student'", conn)
-                conn.close()
-
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Tổng số học sinh", len(df_st))
-                m2.metric("Số em bế tắc EWS", len(df_st[df_st["wrong_attempts"] >= 3]))
-                m3.metric("Tài khoản bị khóa", len(df_st[df_st["is_locked"] == 1]))
-                st.dataframe(df_st, use_container_width=True, height=300)
-
-                locked = df_st[df_st["is_locked"] == 1]
-                if len(locked) > 0:
-                    st.markdown("##### 🔓 Mở khóa tài khoản học sinh vi phạm:")
-                    target = st.selectbox("Chọn học sinh:", locked["account_id"].tolist())
-                    if st.button("Xác nhận Mở Khóa"):
-                        unlock_user_account(target)
-                        st.success(f"Đã mở khóa thành công cho học sinh {target}!")
-                        st.rerun()
-            else:
-                u_st = get_user_by_account_id(user["account_id"])
-                st.metric("Số lần thử sai liên tiếp", f"{u_st['wrong_attempts']}/3")
-                st.metric("Số lần vi phạm nề nếp", f"{u_st['strikes']}/3")
+    st.write("")
+    if st.button("🚪 Đăng Xuất Khỏi Hệ Thống", type="secondary"):
+        st.session_state.user = None
+        st.session_state.chat_history = []
+        st.session_state.nav_page = "🏠 Trang chủ"
+        st.rerun()

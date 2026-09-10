@@ -1,32 +1,44 @@
 import re
 import unicodedata
 
-LEET_MAP = {
-    '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b',
-    '@': 'a', '$': 's', '!': 'i', '*': '', '.': '', '-': '', '_': '', ' ': ''
-}
-
-PROFANITY_PATTERNS = [
-    r'(d|đ)[iieeyy]*[m|p][eeyy]*', r'(d|đ)[iieeyy]*t+[ ]*m[eeyy]*', r'(d|đ)u+[ ]*m[aaoo]*',
-    r'd(c|k)m', r'dmm+', r'cai*[ ]*l[oouu*0-9]+n', r'l[oouu*0-9]+n', r'clgt',
-    r'con[ ]*c(a|ă|â)*c', r'c(a|ă|â)+k', r'c(a|ă|â)+x', r'\bcc\b',
-    r'con[ ]*ch[oóòõọ]+', r'ch[oóòõọ]+[ ]*d[eéèẽẹ]+', r'oc[ ]*ch[oóòõọ]+', r'suc[ ]*vat',
-    r'v(c|k)l+', r'\bvl\b', r'v(a|ã)i+[ ]*(l|c|ch)', r'(d|đ)(e|é)+o+', r'd(e|e)l+',
-    r'b+i+t+c+h+', r'f+u+c+k+', r's+h+i+t+', r'c+u+n+t+'
+BAD_WORDS = [
+    "khung", "khùng", "dien", "điên", "óc chó", "oc cho", "óc lợn", "oc lon",
+    "đồ ngu", "do ngu", "ngu vcl", "ngu vl", "thằng khùng", "thang khung", 
+    "con điên", "con dien", "bị điên", "bi dien", "mẹ mày", "me may", 
+    "con chó", "con cho", "đồ chó", "do cho", "chó chết", "cút", "biến đi"
 ]
-COMPILED_PATTERNS = [re.compile(p, re.IGNORECASE) for p in PROFANITY_PATTERNS]
 
-def normalize_text(text: str) -> str:
-    text = text.lower()
-    text = unicodedata.normalize('NFD', text)
-    text = ''.join(ch for ch in text if unicodedata.category(ch) != 'Mn').replace('đ', 'd')
-    chars = [LEET_MAP.get(c, c) for c in text]
-    return re.sub(r'(.)\1{2,}', r'\1\1', ''.join(chars))
+ACRONYMS = ["clmm", "clm", "cdmm", "cmm", "dmm", "đmm", "dm", "đm", "dcm", "đcm", "vcl", "vkl", "vcc", "đkm", "dkm", "cc"]
 
-def check_profanity(raw_text: str) -> tuple[bool, str | None]:
-    clean = normalize_text(raw_text)
-    for pattern in COMPILED_PATTERNS:
-        match = pattern.search(clean)
-        if match:
-            return True, match.group()
-    return False, None
+SAFE_WORDS = ["luôn", "luon", "lớn", "lon nước", "nilon", "khuôn", "buồn", "uống"]
+
+def strip_accents(text: str) -> str:
+    nfkd = unicodedata.normalize('NFKD', text)
+    return "".join([c for c in nfkd if not unicodedata.combining(c)]).replace("đ", "d").replace("Đ", "D")
+
+def check_profanity(text: str) -> tuple[bool, str]:
+    if not text:
+        return False, ""
+    
+    raw = text.lower().strip()
+    no_acc = strip_accents(raw)
+
+    # Nếu câu có chứa từ an toàn hợp lệ, không xét phạt nhầm
+    for sw in SAFE_WORDS:
+        if sw in raw:
+            raw = raw.replace(sw, " ")
+            no_acc = no_acc.replace(strip_accents(sw), " ")
+
+    for bad in BAD_WORDS:
+        bad_no_acc = strip_accents(bad)
+        pattern = r'\b' + re.escape(bad) + r'\b'
+        pattern_no_acc = r'\b' + re.escape(bad_no_acc) + r'\b'
+        if re.search(pattern, raw) or re.search(pattern_no_acc, no_acc):
+            return True, bad
+
+    words = re.findall(r'[a-zA-Z0-9_]+', raw)
+    for w in words:
+        if w in ACRONYMS:
+            return True, w
+
+    return False, ""
