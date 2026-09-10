@@ -2,6 +2,7 @@ import io
 import sys
 import streamlit as st
 import pandas as pd
+from src.exercises import REAL_EXERCISES
 from src.db import (
     init_db,
     authenticate_user,
@@ -74,137 +75,6 @@ LESSONS_DATA = {
     "Bài 30: Kiểm thử và gỡ lỗi chương trình": "### 1. Kiểm thử & Gỡ lỗi\n- Kiểm tra trường hợp thông thường và trường hợp biên (số 0, số âm, danh sách rỗng)."
 }
 
-# ==================== NGÂN HÀNG BÀI TẬP THỰC TẾ CHUẨN SGK TIN 10 ====================
-REAL_EXERCISES = [
-    {
-        "id": "C1_01",
-        "chapter": "Chương 1: Vào/Ra & Biến cơ sở",
-        "difficulty": "Nhận biết",
-        "title": "In dòng chữ xin chào",
-        "desc": "Viết chương trình Python in ra màn hình chính xác dòng chữ: `Xin chào Python!`",
-        "hint": "Sử dụng hàm: print('Xin chào Python!')",
-        "concept": "Lệnh in cơ bản và chuỗi ký tự",
-        "tests": [{"input": "", "expected": "Xin chào Python!"}]
-    },
-    {
-        "id": "C1_02",
-        "chapter": "Chương 1: Vào/Ra & Biến cơ sở",
-        "difficulty": "Thông hiểu",
-        "title": "Tính tổng hai số nguyên",
-        "desc": "Nhập từ bàn phím hai số nguyên a và b (mỗi số trên một dòng). Tính và in ra tổng của chúng.",
-        "hint": "Cần ép kiểu int cho input(): a = int(input()) và b = int(input()). Sau đó print(a + b).",
-        "concept": "Ép kiểu dữ liệu số nguyên int(input())",
-        "tests": [
-            {"input": "5\n7", "expected": "12"},
-            {"input": "10\n-3", "expected": "7"}
-        ]
-    },
-    {
-        "id": "C1_03",
-        "chapter": "Chương 1: Vào/Ra & Biến cơ sở",
-        "difficulty": "Vận dụng",
-        "title": "Tính diện tích hình chữ nhật",
-        "desc": "Nhập chiều dài và chiều rộng (số thực) trên 2 dòng. In ra diện tích của hình chữ nhật.",
-        "hint": "Dùng float(input()) để đọc số thực. Diện tích = dài * rộng.",
-        "concept": "Ép kiểu dữ liệu số thực float(input())",
-        "tests": [
-            {"input": "4.5\n2.0", "expected": "9.0"},
-            {"input": "10\n5", "expected": "50.0"}
-        ]
-    },
-    {
-        "id": "C2_01",
-        "chapter": "Chương 2: Rẽ nhánh & Vòng lặp",
-        "difficulty": "Nhận biết",
-        "title": "Kiểm tra số chẵn lẻ",
-        "desc": "Nhập một số nguyên n từ bàn phím. In `CHAN` nếu n là số chẵn, ngược lại in `LE`.",
-        "hint": "Dùng phép chia dư n % 2 == 0 kết hợp câu lệnh if/else.",
-        "concept": "Cấu trúc rẽ nhánh if-else và toán tử %",
-        "tests": [
-            {"input": "8", "expected": "CHAN"},
-            {"input": "15", "expected": "LE"}
-        ]
-    },
-    {
-        "id": "C2_02",
-        "chapter": "Chương 2: Rẽ nhánh & Vòng lặp",
-        "difficulty": "Thông hiểu",
-        "title": "Tìm số lớn hơn trong hai số",
-        "desc": "Nhập hai số nguyên a và b trên 2 dòng. In ra giá trị của số lớn hơn.",
-        "hint": "Dùng câu lệnh rẽ nhánh if a > b: print(a) else: print(b).",
-        "concept": "So sánh logic và rẽ nhánh điều kiện",
-        "tests": [
-            {"input": "12\n25", "expected": "25"},
-            {"input": "99\n40", "expected": "99"}
-        ]
-    },
-    {
-        "id": "C2_03",
-        "chapter": "Chương 2: Rẽ nhánh & Vòng lặp",
-        "difficulty": "Vận dụng cao",
-        "title": "Tính tổng dãy số từ 1 đến N",
-        "desc": "Nhập số nguyên dương N. Tính và in ra tổng S = 1 + 2 + ... + N.",
-        "hint": "Khởi tạo s = 0. Sử dụng vòng lặp for i in range(1, n + 1): s += i. Sau đó print(s).",
-        "concept": "Vòng lặp for và hàm range(start, stop)",
-        "tests": [
-            {"input": "5", "expected": "15"},
-            {"input": "10", "expected": "55"}
-        ]
-    },
-    {
-        "id": "C3_01",
-        "chapter": "Chương 3: Xâu ký tự & Kiểu List",
-        "difficulty": "Nhận biết",
-        "title": "Độ dài xâu ký tự",
-        "desc": "Nhập một xâu ký tự từ bàn phím. In ra số lượng ký tự của xâu đó.",
-        "hint": "Dùng s = input() và in ra kết quả của hàm len(s).",
-        "concept": "Xử lý xâu cơ bản và hàm len()",
-        "tests": [
-            {"input": "EduCoder", "expected": "8"},
-            {"input": "Tin hoc 10", "expected": "10"}
-        ]
-    },
-    {
-        "id": "C3_02",
-        "chapter": "Chương 3: Xâu ký tự & Kiểu List",
-        "difficulty": "Thông hiểu",
-        "title": "Đếm số phần tử chẵn trong danh sách",
-        "desc": "Dòng 1 nhập số N. Dòng 2 nhập N số nguyên cách nhau bằng dấu cách. Đếm số lượng các số chẵn.",
-        "hint": "Dùng lst = list(map(int, input().split())), duyệt for x in lst và kiểm tra x % 2 == 0.",
-        "concept": "Duyệt danh sách List và biến đếm",
-        "tests": [
-            {"input": "5\n1 2 4 7 8", "expected": "3"},
-            {"input": "4\n1 3 5 7", "expected": "0"}
-        ]
-    },
-    {
-        "id": "C4_01",
-        "chapter": "Chương 4: Hàm & Chương trình con",
-        "difficulty": "Thông hiểu",
-        "title": "Hàm tính lũy thừa cơ số",
-        "desc": "Nhập cơ số a và số mũ b trên 2 dòng. Định nghĩa hàm luy_thua(a, b) và in ra giá trị a mũ b.",
-        "hint": "Định nghĩa def luy_thua(a, b): return a ** b. Sau đó gọi print(luy_thua(a, b)).",
-        "concept": "Định nghĩa hàm def và lệnh return",
-        "tests": [
-            {"input": "2\n3", "expected": "8"},
-            {"input": "5\n2", "expected": "25"}
-        ]
-    },
-    {
-        "id": "C5_01",
-        "chapter": "Chương 5: Thuật toán & Gỡ lỗi",
-        "difficulty": "Vận dụng cao",
-        "title": "Tìm số lớn nhất trong dãy",
-        "desc": "Dòng 1 nhập số N. Dòng 2 nhập N số nguyên cách nhau bởi khoảng trắng. In ra phần tử lớn nhất.",
-        "hint": "Khởi tạo max_val = lst[0] và duyệt qua danh sách để so sánh cập nhật.",
-        "concept": "Thuật toán tìm cực trị Max/Min trên mảng",
-        "tests": [
-            {"input": "5\n3 9 1 12 7", "expected": "12"},
-            {"input": "3\n-5 -2 -9", "expected": "-2"}
-        ]
-    }
-]
-
 # ==================== CHẨN ĐOÁN QUAN NIỆM SAI LẦM ====================
 def diagnose_student_misconception(student_code, error_msg, actual_output, expected_output, exercise):
     code_str = student_code.strip()
@@ -215,9 +85,8 @@ def diagnose_student_misconception(student_code, error_msg, actual_output, expec
             return ("Thiếu dấu hai chấm `:`", "Sau câu lệnh if, else, for, while, def bắt buộc phải kết thúc bằng dấu hai chấm `:`. Em hãy bổ sung nhé!", "Syntax_Missing_Colon")
         return ("Sai cú pháp câu lệnh", f"Chương trình gặp lỗi: {error_msg}. Em hãy kiểm tra lại chính tả từ khóa.", "Syntax_General")
         
-    if exercise["id"] in ["C1_02", "C1_03"]:
-        if "input()" in code_str and "int(" not in code_str and "float(" not in code_str:
-            return ("Quên ép kiểu int() / float()", "Hàm `input()` mặc định trả về chuỗi văn bản. Khi em cộng `a + b`, Python sẽ nối hai chuỗi lại với nhau thay vì tính tổng số học. Em hãy dùng `int(input())` nhé!", "Misconception_Type_Casting")
+    if "input()" in code_str and ("+" in code_str) and ("int(" not in code_str and "float(" not in code_str):
+        return ("Quên ép kiểu int() / float()", "Hàm `input()` mặc định trả về chuỗi văn bản. Khi em cộng `a + b`, Python sẽ nối hai chuỗi lại với nhau thay vì tính tổng số học. Em hãy dùng `int(input())` nhé!", "Misconception_Type_Casting")
 
     if "if " in code_str and "=" in code_str and "==" not in code_str and "!=" not in code_str and ">" not in code_str and "<" not in code_str:
         return ("Nhầm giữa phép gán `=` và so sánh `==`", "Dấu `=` dùng để gán giá trị cho biến. Để so sánh bằng nhau trong câu lệnh if, em phải dùng hai dấu bằng `==`.", "Misconception_Equal_Operator")
@@ -279,7 +148,7 @@ else:
 
 st.markdown("""
     <div style='background-color: #0284c7; padding: 14px; border-radius: 8px; margin-bottom: 20px;'>
-        <h3 style='color: white; margin: 0;'>💻 EDUCODER 10 - TRỢ LÝ HỌC LẬP TRÌNH CÁ NHÂN HÓA TIN HỌC 10 (GDPT 2018)</h3>
+        <h3 style='color: white; margin: 0;'>💻 EDUCODER 10 - TRỢ LÝ HỌC LẬP TRÌNH CÁ NHÂN HÓA TIN HỌC 10</h3>
     </div>
 """, unsafe_allow_html=True)
 
@@ -305,10 +174,11 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ----------------- TAB 1: TRANG CHỦ (MA TRẬN NĂNG LỰC THỰC TẾ) -----------------
 if st.session_state.nav_page == "🏠 Trang chủ":
     if not is_teacher:
-        st.markdown(f"### 🎯 Xin chào **{user['full_name']}**! Bảng điều khiển Trợ lý Cá nhân hóa")
+        st.markdown(f"### Xin chào **{user['full_name']}**!")
         
         with st.container(border=True):
-            st.markdown("#### 📊 Năng lực Lập trình cá nhân")
+            st.markdown("#### Ma trận Năng lực Lập trình Thực tế của Em")
+            st.caption("Chỉ số % thành thạo được tính toán thực tế 100% từ kết quả bài nộp của em trong CSDL (không có điểm ảo).")
             
             competencies = get_student_competencies(user["account_id"])
             cols_comp = st.columns(len(competencies))
@@ -331,7 +201,7 @@ if st.session_state.nav_page == "🏠 Trang chủ":
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        st.markdown("#### Lộ trình Học tập Hôm nay")
+        st.markdown("#### 🚀 Lộ trình Học tập Thích ứng Hôm nay (AI Tutor đề xuất theo năng lực thật)")
         st.caption("Dựa trên tiến độ bài làm và các lỗ hổng kiến thức đã được ghi nhận, Trợ lý AI thiết kế lộ trình 3 bước:")
         
         recommendations = get_adaptive_recommendation(user["account_id"], REAL_EXERCISES)
@@ -349,7 +219,7 @@ if st.session_state.nav_page == "🏠 Trang chủ":
                         st.session_state.current_ex_id = rec["exercise"]["id"]
                         st.session_state.doing_exercise = True
                         st.session_state.messages = []
-                        st.session_state.nav_page = "Kho Bài Tập Python"
+                        st.session_state.nav_page = "📝 Kho Bài Tập Python"
                         st.rerun()
 
     else:
@@ -359,15 +229,15 @@ if st.session_state.nav_page == "🏠 Trang chủ":
         c1, c2, c3 = st.columns(3)
         with c1:
             with st.container(border=True):
-                st.markdown("#### 📖 Lý thuyết Tin học 10")
+                st.markdown("#### 📖 Lý thuyết Tin 10")
                 st.write("Bài học cốt lõi theo chương trình GDPT 2018.")
                 if st.button("Xem Lý thuyết ➡️", key="btn_t_theory", use_container_width=True):
                     st.session_state.nav_page = "📖 Lý thuyết SGK"
                     st.rerun()
         with c2:
             with st.container(border=True):
-                st.markdown("#### 📝 Kho Bài Tập Python")
-                st.write("Ngân hàng các bài tập theo mức độ nhận biết.")
+                st.markdown("#### 📝 Kho Bài Tập")
+                st.write("Ngân hàng bài tập theo mức độ.")
                 if st.button("Xem Bài tập ➡️", key="btn_t_practice", use_container_width=True):
                     st.session_state.nav_page = "📝 Kho Bài Tập Python"
                     st.rerun()
@@ -388,7 +258,7 @@ elif st.session_state.nav_page == "📖 Lý thuyết SGK":
         st.markdown(f"## 📘 {selected_lesson}")
         st.markdown(LESSONS_DATA[selected_lesson])
 
-# ----------------- TAB 3: KHO BÀI TẬP PYTHON & CHẤM ĐIỂM CÁ NHÂN HÓA -----------------
+# ----------------- TAB 3: KHO BÀI TẬP PYTHON (200 BÀI & CHẤM ĐIỂM THỰC TẾ) -----------------
 elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
     if st.session_state.doing_exercise and st.session_state.current_ex_id:
         curr_ex = next((item for item in REAL_EXERCISES if item["id"] == st.session_state.current_ex_id), REAL_EXERCISES[0])
@@ -571,25 +441,26 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
                         st.session_state.messages = []
                         st.rerun()
 
-# ----------------- TAB 4: BÁO CÁO BENCHMARK (DỮ LIỆU THỰC TẾ 100% CHO GIÁO VIÊN) -----------------
+# ----------------- TAB 4: BÁO CÁO BENCHMARK THỰC TẾ (CHỈ GIÁO VIÊN) -----------------
 elif st.session_state.nav_page == "📊 Báo cáo Benchmark" and is_teacher:
-    st.markdown("### 📊 BÁO CÁO BENCHMARK THỰC TẾ TOÀN KHỐI 10")
+    st.markdown("### 📊 BÁO CÁO BENCHMARK")
     
     real_data = get_real_benchmark_report()
     
     if real_data:
         df_bench = pd.DataFrame(real_data)
         
-        # Thống kê KPI thực tế
+        # Thống kê KPI thực tế 100%
         active_count = len(df_bench[df_bench["total_submissions"] > 0])
         total_subs = int(df_bench["total_submissions"].sum())
         avg_score_all = round(df_bench[df_bench["total_submissions"] > 0]["avg_score"].mean(), 1) if active_count > 0 else 0.0
+        locked_count = len(df_bench[df_bench["status_display"] == "Tạm khóa"])
         
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("👥 Tổng số học sinh", f"{len(df_bench)} HS (10 Lớp)")
-        k2.metric("📝 Học sinh đã làm bài thật", f"{active_count} HS")
-        k3.metric("🚀 Tổng lượt nộp bài thực tế", f"{total_subs} lần")
-        k4.metric("🎯 Điểm TB của HS đã nộp", f"{avg_score_all}/10")
+        k2.metric("📝 Học sinh đã làm bài", f"{active_count} HS")
+        k3.metric("🚀 Tổng lượt nộp bài", f"{total_subs} lần")
+        k4.metric("🛡️ Học sinh vi phạm tạm khóa", f"{locked_count} HS", delta_color="inverse")
         
         st.markdown("---")
         
@@ -611,31 +482,38 @@ elif st.session_state.nav_page == "📊 Báo cáo Benchmark" and is_teacher:
                 df_view["account_id"].str.lower().str.contains(q)
             ]
 
-        # Trình bày bảng chuẩn hóa
+        # Định dạng chuẩn sư phạm: nếu chưa nộp bài hiển thị "-"
+        def format_score(row, field):
+            return str(row[field]) if row["total_submissions"] > 0 else "-"
+
+        df_view["highest_display"] = df_view.apply(lambda r: format_score(r, "highest_score"), axis=1)
+        df_view["avg_display"] = df_view.apply(lambda r: format_score(r, "avg_score"), axis=1)
+
+        # Trình bày bảng
         df_display = df_view[[
-            "account_id", "full_name", "class_name", "passed_exercises", "total_submissions", "highest_score", "avg_score", "status"
+            "account_id", "full_name", "class_name", "status_display", "total_submissions", "passed_exercises", "highest_display", "avg_display"
         ]].rename(columns={
             "account_id": "Mã học sinh",
             "full_name": "Họ và tên",
             "class_name": "Lớp",
-            "passed_exercises": "Số bài đạt chuẩn (>=8.0)",
+            "status_display": "Trạng thái",
             "total_submissions": "Số lần nộp bài thật",
-            "highest_score": "Điểm cao nhất",
-            "avg_score": "Điểm trung bình",
-            "status": "Trạng thái"
+            "passed_exercises": "Số bài đạt chuẩn (>=8.0)",
+            "highest_display": "Điểm cao nhất",
+            "avg_display": "Điểm trung bình"
         })
         
         df_display.reset_index(drop=True, inplace=True)
         df_display.index = range(1, len(df_display) + 1)
         df_display.index.name = "STT"
         st.dataframe(df_display, use_container_width=True, height=520)
-        st.caption("Dữ liệu được cập nhật tự động từ các bài nộp trong hệ thống.")
+        st.caption("Dữ liệu được cập nhật tự động và phản ánh chính xác kết quả thực tế của từng học sinh.")
     else:
         st.info("Chưa có dữ liệu học sinh trong hệ thống.")
 
 # ----------------- TAB 5: HỒ SƠ CÁ NHÂN & PHÂN QUYỀN -----------------
 elif st.session_state.nav_page == user_tag:
-    st.markdown(f"### ⚙️ QUẢN TRỊ: {clean_name}")
+    st.markdown(f"### {clean_name}")
     col_p1, col_p2 = st.columns(2)
     
     if is_teacher:
@@ -657,11 +535,11 @@ elif st.session_state.nav_page == user_tag:
                             st.write(f"👤 **{s['full_name']}** (`{s['account_id']}`) - Lớp: {s.get('class_name', 'N/A')}")
                         with cb:
                             if st.button("🔓 Mở", key=f"unl_{s['id']}"):
-                                unlock_user(s['account_id'])
-                                st.success(f"Đã mở khóa thành công cho {s['full_name']}!")
+                                unlock_user(s['id'])
+                                st.success(f"Đã mở khóa cho {s['full_name']}!")
                                 st.rerun()
                 else:
-                    st.info("👍 Không có học sinh nào đang bị khóa.")
+                    st.success("✅ Không có học sinh nào bị tạm khóa.")
 
         with col_p2:
             with st.container(border=True):
@@ -680,8 +558,21 @@ elif st.session_state.nav_page == user_tag:
             with st.container(border=True):
                 st.markdown("#### 👤 Thông tin Học sinh")
                 st.write(f"**Họ và tên:** {user.get('full_name', '')}")
-                st.write(f"**Mã số:** `{user.get('account_id', '')}` | **Lớp:** {user.get('class_name', '10')}")
-                st.write(f"**Trạng thái:** {user.get('status', 'Bình thường')} | **Số lần vi phạm:** `{user.get('strikes', 0)}/3`")
+                st.write(f"**Mã số học sinh:** `{user.get('account_id', '')}`")
+                st.write(f"**Lớp học:** {user.get('class_name', '10')}")
+                st.write(f"**Email trường học:** `{user.get('account_id')}@school.edu.vn`")
+                st.write(f"**Trạng thái tài khoản:** {user.get('status', 'Bình thường')}")
+                st.write(f"**Số lần vi phạm kỷ luật:** `{user.get('strikes', 0)}/3`")
+                
+                # Bổ sung thống kê học tập thực tế của học sinh
+                highest_score = get_student_highest_score(user.get('account_id'))
+                comps = get_student_competencies(user.get('account_id'))
+                total_passed = sum(c['passed_count'] for c in comps)
+                total_attempts = sum(c['total_attempts'] for c in comps)
+                st.markdown("---")
+                st.write(f"**📈 Tổng số lượt nộp bài:** {total_attempts} lần")
+                st.write(f"**🏆 Số bài đạt chuẩn (>=8.0):** {total_passed} bài")
+                st.write(f"**⭐ Điểm cao nhất đạt được:** {highest_score}/10 điểm")
 
         with col_p2:
             with st.container(border=True):
@@ -697,8 +588,10 @@ elif st.session_state.nav_page == user_tag:
                         st.error("Thông tin không chính xác.")
 
     st.markdown("---")
-    if st.button("🚪 Đăng Xuất Khỏi Hệ Thống", type="secondary"):
+    if st.button("🚪 Đăng Xuất Khỏi Hệ Thống", type="secondary", use_container_width=True):
         st.session_state.user = None
         st.session_state.authenticated = False
         st.session_state.nav_page = "🏠 Trang chủ"
+        st.session_state.doing_exercise = False
+        st.session_state.messages = []
         st.rerun()

@@ -5,14 +5,13 @@ import sqlite3
 DB_DIR = "data"
 DB_PATH = os.path.join(DB_DIR, "database.db")
 
-# Định nghĩa chuẩn 5 nhóm năng lực và số lượng bài thực tế tương ứng
-TOPIC_CONFIG = {
-    "C1": {"name": "Vào/Ra & Biến cơ sở (Bài 16-18)", "total_ex": 3},
-    "C2": {"name": "Rẽ nhánh & Vòng lặp (Bài 19-21)", "total_ex": 3},
-    "C3": {"name": "Xâu ký tự & Kiểu List (Bài 22-25)", "total_ex": 2},
-    "C4": {"name": "Hàm & Chương trình con (Bài 26-28)", "total_ex": 1},
-    "C5": {"name": "Thuật toán & Gỡ lỗi (Bài 29-30)", "total_ex": 1}
-}
+COMPETENCY_TOPICS = [
+    {"prefix": "C1", "name": "Vào/Ra & Biến cơ sở (Bài 16-18)", "total_ex": 40},
+    {"prefix": "C2", "name": "Rẽ nhánh & Vòng lặp (Bài 19-21)", "total_ex": 40},
+    {"prefix": "C3", "name": "Xâu ký tự & Kiểu List (Bài 22-25)", "total_ex": 40},
+    {"prefix": "C4", "name": "Hàm & Chương trình con (Bài 26-28)", "total_ex": 40},
+    {"prefix": "C5", "name": "Thuật toán & Gỡ lỗi (Bài 29-30)", "total_ex": 40}
+]
 
 def get_connection():
     os.makedirs(DB_DIR, exist_ok=True)
@@ -24,7 +23,7 @@ def init_db():
     conn = get_connection()
     cur = conn.cursor()
     
-    # 1. Bảng tài khoản
+    # 1. Bảng tài khoản người dùng
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,11 +35,12 @@ def init_db():
             class_name TEXT,
             strikes INTEGER DEFAULT 0,
             is_locked INTEGER DEFAULT 0,
-            status TEXT DEFAULT 'Bình thường'
+            is_activated INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'Chưa kích hoạt'
         )
     """)
     
-    # 2. Bảng lưu trữ bài nộp thực tế
+    # 2. Bảng bài nộp thật
     cur.execute("""
         CREATE TABLE IF NOT EXISTS submissions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,7 +55,7 @@ def init_db():
         )
     """)
 
-    # 3. Bảng Ma trận năng lực thực tế
+    # 3. Bảng Ma trận năng lực
     cur.execute("""
         CREATE TABLE IF NOT EXISTS student_competencies (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,28 +70,33 @@ def init_db():
         )
     """)
 
-    # TỰ ĐỘNG MIGRATION: Bổ sung các cột thiếu vào bảng cũ để chống văng lỗi OperationalError
-    cur.execute("PRAGMA table_info(student_competencies)")
-    comp_cols = [c[1] for c in cur.fetchall()]
-    if "last_misconception" not in comp_cols and len(comp_cols) > 0:
-        cur.execute("ALTER TABLE student_competencies ADD COLUMN last_misconception TEXT DEFAULT 'Chưa có'")
+    # Migration bổ sung cột nếu bảng cũ thiếu
+    cur.execute("PRAGMA table_info(users)")
+    user_cols = [c[1] for c in cur.fetchall()]
+    if "is_activated" not in user_cols:
+        cur.execute("ALTER TABLE users ADD COLUMN is_activated INTEGER DEFAULT 0")
 
     cur.execute("PRAGMA table_info(submissions)")
     sub_cols = [c[1] for c in cur.fetchall()]
-    if "misconception" not in sub_cols and len(sub_cols) > 0:
+    if "misconception" not in sub_cols:
         cur.execute("ALTER TABLE submissions ADD COLUMN misconception TEXT DEFAULT ''")
-    if "attempt_count" not in sub_cols and len(sub_cols) > 0:
+    if "attempt_count" not in sub_cols:
         cur.execute("ALTER TABLE submissions ADD COLUMN attempt_count INTEGER DEFAULT 1")
 
-    # 4. Tài khoản Giáo viên mặc định
+    cur.execute("PRAGMA table_info(student_competencies)")
+    comp_cols = [c[1] for c in cur.fetchall()]
+    if "last_misconception" not in comp_cols:
+        cur.execute("ALTER TABLE student_competencies ADD COLUMN last_misconception TEXT DEFAULT 'Chưa có'")
+
+    # 4. Tài khoản Giáo viên quản trị mặc định
     cur.execute("SELECT id FROM users WHERE email = 'luyennmhcmue@gmail.com'")
     if not cur.fetchone():
         cur.execute("""
-            INSERT INTO users (account_id, email, password, full_name, role, class_name)
-            VALUES ('gv_luyen', 'luyennmhcmue@gmail.com', '123456', 'Nguyễn Mỹ Luyến', 'teacher', 'Tổ Tin Học')
+            INSERT INTO users (account_id, email, password, full_name, role, class_name, is_activated, status)
+            VALUES ('gv_luyen', 'luyennmhcmue@gmail.com', '123456', 'Nguyễn Mỹ Luyến', 'teacher', 'Tổ Tin Học', 1, 'Bình thường')
         """)
 
-    # 5. Khởi tạo danh sách 400 học sinh (10 lớp x 40 học sinh) hoàn toàn sạch dữ liệu giả
+    # 5. Khởi tạo danh sách 400 học sinh: 100% SẠCH SẼ, KHÔNG GHI KHỐNG KỶ LUẬT
     cur.execute("SELECT COUNT(*) FROM users WHERE role = 'student'")
     if cur.fetchone()[0] < 400:
         ho_list = ["Nguyễn", "Trần", "Lê", "Phạm", "Hoàng", "Huỳnh", "Phan", "Vũ", "Võ", "Đặng"]
@@ -107,27 +112,75 @@ def init_db():
                 acc_id = f"{c_prefix}_{s_num:02d}"
                 name = "Trần Minh Đức" if acc_id == "10a1_01" else f"{random.choice(ho_list)} {random.choice(dem_list)} {random.choice(ten_list)}"
                 email = f"{acc_id}@school.edu.vn"
-                students_to_insert.append((acc_id, email, "123456", name, "student", c_name, 0, 0, "Bình thường"))
+                # Mọi học sinh ban đầu đều bình đẳng: 0 lỗi, chưa khóa, chưa kích hoạt
+                students_to_insert.append((acc_id, email, "123456", name, "student", c_name, 0, 0, 0, "Chưa kích hoạt"))
 
         cur.execute("DELETE FROM users WHERE role = 'student'")
         cur.executemany("""
-            INSERT INTO users (account_id, email, password, full_name, role, class_name, strikes, is_locked, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (account_id, email, password, full_name, role, class_name, strikes, is_locked, is_activated, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, students_to_insert)
+
+    # 6. DỌN SẠCH CÁC TRẠNG THÁI GÁN KHỐNG TỪ TRƯỚC TRONG CSDL CŨ
+    # Mở khóa và xóa sạch strikes cho những học sinh bị gán ảo trước đó
+    cur.execute("""
+        UPDATE users 
+        SET is_locked = 0, strikes = 0 
+        WHERE account_id IN ('10a2_15', '10a5_22', '10a7_09', '10a9_31')
+    """)
+
+    # Đồng bộ trạng thái: Ai chưa kích hoạt thì giữ 'Chưa kích hoạt'
+    cur.execute("""
+        UPDATE users 
+        SET status = CASE 
+            WHEN is_locked = 1 THEN 'Tạm khóa'
+            WHEN is_activated = 1 THEN 'Bình thường'
+            ELSE 'Chưa kích hoạt'
+        END
+        WHERE role = 'student'
+    """)
 
     conn.commit()
     conn.close()
 
-# --- TÍNH TOÁN NĂNG LỰC THỰC TẾ 100% (KHÔNG SỐ LIỆU ẢO) ---
+# --- XÁC THỰC VÀ KÍCH HOẠT HỌC SINH KHI THỰC SỰ ĐĂNG NHẬP ---
+def authenticate_user(login_id, password):
+    if not login_id or not password:
+        return None, "Vui lòng nhập đầy đủ tài khoản và mật khẩu."
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT * FROM users 
+        WHERE (email = ? OR account_id = ?) AND password = ?
+    """, (str(login_id).strip(), str(login_id).strip(), str(password).strip()))
+    user = cur.fetchone()
+
+    if not user:
+        conn.close()
+        return None, "Tài khoản hoặc mật khẩu không chính xác."
+    
+    u_dict = dict(user)
+    if u_dict.get("is_locked") == 1:
+        conn.close()
+        return None, "Tài khoản đang bị tạm khóa do vi phạm kỷ luật!"
+
+    # Kích hoạt tài khoản khi học sinh thực sự đăng nhập vào hệ thống
+    if u_dict.get("is_activated") == 0:
+        cur.execute("UPDATE users SET is_activated = 1, status = 'Bình thường' WHERE id = ?", (u_dict["id"],))
+        conn.commit()
+        u_dict["is_activated"] = 1
+        u_dict["status"] = "Bình thường"
+
+    conn.close()
+    return u_dict, "Đăng nhập thành công!"
+
+authenticate = authenticate_user
+
+# --- TÍNH TOÁN MA TRẬN NĂNG LỰC THỰC TẾ 100% ---
 def sync_real_student_competency(account_id):
-    """
-    Tính toán chính xác năng lực người học dựa trên lịch sử nộp bài thực tế trong bảng submissions:
-    Mastery % = (Tổng điểm cao nhất các bài đạt được trong chủ đề / Tổng điểm tối đa của chủ đề) * 100
-    """
     conn = get_connection()
     cur = conn.cursor()
     
-    # Lấy điểm cao nhất của từng bài mà học sinh này đã thực sự nộp
     cur.execute("""
         SELECT exercise_id, MAX(score) as best_score, COUNT(id) as attempts
         FROM submissions
@@ -136,7 +189,6 @@ def sync_real_student_competency(account_id):
     """, (str(account_id),))
     sub_rows = cur.fetchall()
     
-    # Lấy lỗi nhận thức gần nhất theo từng chủ đề
     cur.execute("""
         SELECT exercise_id, misconception
         FROM submissions
@@ -144,29 +196,26 @@ def sync_real_student_competency(account_id):
         ORDER BY submitted_at DESC
     """, (str(account_id),))
     misc_rows = cur.fetchall()
-    latest_misc_by_topic = {}
+    latest_misc = {}
     for r in misc_rows:
-        prefix = r["exercise_id"].split("_")[0]
-        if prefix not in latest_misc_by_topic:
-            latest_misc_by_topic[prefix] = r["misconception"]
+        p = r["exercise_id"].split("_")[0]
+        if p not in latest_misc:
+            latest_misc[p] = r["misconception"]
 
-    # Tổng hợp theo từng nhóm năng lực
     best_scores = {r["exercise_id"]: r["best_score"] for r in sub_rows}
-    attempts_per_ex = {r["exercise_id"]: r["attempts"] for r in sub_rows}
+    attempts_map = {r["exercise_id"]: r["attempts"] for r in sub_rows}
 
-    for prefix, cfg in TOPIC_CONFIG.items():
-        total_ex = cfg["total_ex"]
-        # Lấy các bài thuộc chủ đề này
-        topic_scores = [best_scores.get(f"{prefix}_{i:02d}", 0.0) for i in range(1, total_ex + 1)]
-        passed_count = sum(1 for s in topic_scores if s >= 8.0)
-        total_attempts = sum(attempts_per_ex.get(f"{prefix}_{i:02d}", 0) for i in range(1, total_ex + 1))
+    for t in COMPETENCY_TOPICS:
+        p = t["prefix"]
+        total_ex = t["total_ex"]
         
-        # Phần trăm thành thạo thực tế = Điểm đạt được / Điểm tối đa
-        total_points = sum(topic_scores)
-        max_possible_points = total_ex * 10.0
-        real_mastery = round((total_points / max_possible_points) * 100.0, 1)
+        topic_scores = [best_scores.get(f"{p}_{i:02d}", 0.0) for i in range(1, total_ex + 1)]
+        passed_cnt = sum(1 for s in topic_scores if s >= 8.0)
+        total_att = sum(attempts_map.get(f"{p}_{i:02d}", 0) for i in range(1, total_ex + 1))
         
-        last_misc = latest_misc_by_topic.get(prefix, "Chưa ghi nhận lỗi")
+        pts = sum(topic_scores)
+        mastery = round((pts / (total_ex * 10.0)) * 100.0, 1)
+        misc = latest_misc.get(p, "Chưa ghi nhận lỗi")
 
         cur.execute("""
             INSERT INTO student_competencies (account_id, topic_prefix, topic_name, mastery_percent, total_attempts, passed_count, last_misconception)
@@ -176,13 +225,12 @@ def sync_real_student_competency(account_id):
                 total_attempts = excluded.total_attempts,
                 passed_count = excluded.passed_count,
                 last_misconception = excluded.last_misconception
-        """, (str(account_id), prefix, cfg["name"], real_mastery, total_attempts, passed_count, last_misc))
+        """, (str(account_id), p, t["name"], mastery, total_att, passed_cnt, misc))
 
     conn.commit()
     conn.close()
 
 def get_student_competencies(account_id):
-    # Đồng bộ số liệu thực tế trước khi hiển thị
     sync_real_student_competency(account_id)
     conn = get_connection()
     cur = conn.cursor()
@@ -196,19 +244,17 @@ def get_student_competencies(account_id):
     conn.close()
     return [dict(r) for r in rows]
 
-# --- LỘ TRÌNH THÍCH ỨNG DỰA TRÊN TIẾN TRÌNH THẬT ---
+# --- LỘ TRÌNH THÍCH ỨNG DỰA TRÊN DỮ LIỆU THẬT ---
 def get_adaptive_recommendation(account_id, exercise_bank):
     comps = get_student_competencies(account_id)
     if not comps:
         return []
 
-    # Sắp xếp theo mức độ thành thạo thực tế
     sorted_comps = sorted(comps, key=lambda x: x["mastery_percent"])
     weakest = sorted_comps[0]
     focus = sorted_comps[1] if len(sorted_comps) > 1 else weakest
     strongest = sorted_comps[-1]
 
-    # Tìm bài tập thực tế tương ứng trong ngân hàng bài
     ex_weak = next((e for e in exercise_bank if e["id"].startswith(weakest["topic_prefix"]) and e["difficulty"] == "Nhận biết"), exercise_bank[0])
     ex_focus = next((e for e in exercise_bank if e["id"].startswith(focus["topic_prefix"]) and e["difficulty"] in ["Thông hiểu", "Vận dụng"]), exercise_bank[1])
     ex_challenge = next((e for e in exercise_bank if e["id"].startswith(strongest["topic_prefix"]) and e["difficulty"] in ["Vận dụng", "Vận dụng cao"]), exercise_bank[-1])
@@ -218,23 +264,55 @@ def get_adaptive_recommendation(account_id, exercise_bank):
             "type": "Củng cố nền tảng",
             "badge": "🔴 Ưu tiên khắc phục",
             "exercise": ex_weak,
-            "reason": f"Chủ đề '{weakest['topic_name']}' em mới hoàn thành {weakest['mastery_percent']}%. Em cần giải quyết vững bài Nhận biết này trước."
+            "reason": f"Chủ đề '{weakest['topic_name']}' đạt {weakest['mastery_percent']}%. Em cần giải quyết bài Nhận biết này trước."
         },
         {
             "type": "Rèn luyện trọng tâm (ZPD)",
             "badge": "🟡 Vùng phát triển gần nhất",
             "exercise": ex_focus,
-            "reason": f"Chủ đề '{focus['topic_name']}' đạt {focus['mastery_percent']}%. Bài tập này phù hợp nhất với trình độ thực tế hiện tại của em."
+            "reason": f"Chủ đề '{focus['topic_name']}' đạt {focus['mastery_percent']}%. Bài tập này phù hợp nhất với năng lực hiện tại của em."
         },
         {
             "type": "Thử thách nâng cao",
             "badge": "🟢 Thử thách bứt phá",
             "exercise": ex_challenge,
-            "reason": f"Phát huy kết quả học tập ở chủ đề '{strongest['topic_name']}' ({strongest['mastery_percent']}%)."
+            "reason": f"Phát huy năng lực ở chủ đề '{strongest['topic_name']}' ({strongest['mastery_percent']}%)."
         }
     ]
 
-# --- GHI NHẬN NỘP BÀI VÀ XÁC THỰC ---
+# --- BÁO CÁO BENCHMARK 100% THỰC TẾ CHO GIÁO VIÊN ---
+def get_real_benchmark_report():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT 
+            u.account_id,
+            u.full_name,
+            u.class_name,
+            u.is_locked,
+            u.is_activated,
+            CASE 
+                WHEN u.is_locked = 1 THEN 'Tạm khóa'
+                WHEN u.is_activated = 0 THEN 'Chưa kích hoạt'
+                ELSE 'Bình thường'
+            END as status_display,
+            COUNT(s.id) as total_submissions,
+            COUNT(DISTINCT CASE WHEN s.score >= 8.0 THEN s.exercise_id END) as passed_exercises,
+            COALESCE(MAX(s.score), 0.0) as highest_score,
+            COALESCE(ROUND(AVG(s.score), 1), 0.0) as avg_score
+        FROM users u
+        LEFT JOIN submissions s ON u.account_id = s.account_id
+        WHERE u.role = 'student'
+        GROUP BY u.account_id
+        ORDER BY u.class_name ASC, u.account_id ASC
+    """)
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_all_students():
+    return get_real_benchmark_report()
+
 def save_submission(account_id, exercise_id, code, status, score=0, misconception=""):
     conn = get_connection()
     cur = conn.cursor()
@@ -245,10 +323,11 @@ def save_submission(account_id, exercise_id, code, status, score=0, misconceptio
         INSERT INTO submissions (account_id, exercise_id, code, status, score, misconception, attempt_count)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (str(account_id), str(exercise_id), str(code), str(status), float(score), misconception, current_attempt))
+    
+    cur.execute("UPDATE users SET is_activated = 1, status = 'Bình thường' WHERE account_id = ? AND is_locked = 0", (str(account_id),))
     conn.commit()
     conn.close()
     
-    # Đồng bộ tính toán lại ngay sau khi nộp
     sync_real_student_competency(account_id)
 
 def get_exercise_submission_count(account_id, exercise_id):
@@ -275,56 +354,6 @@ def get_student_highest_score(account_id=None, exercise_id=None):
     except Exception:
         return 0.0
 
-def authenticate_user(login_id, password):
-    if not login_id or not password:
-        return None, "Vui lòng nhập đầy đủ tài khoản và mật khẩu."
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT * FROM users 
-        WHERE (email = ? OR account_id = ?) AND password = ?
-    """, (str(login_id).strip(), str(login_id).strip(), str(password).strip()))
-    user = cur.fetchone()
-    conn.close()
-    if not user:
-        return None, "Tài khoản hoặc mật khẩu không chính xác."
-    u_dict = dict(user)
-    if u_dict.get("is_locked") == 1:
-        return None, "Tài khoản đang bị tạm khóa do vi phạm kỷ luật!"
-    return u_dict, "Đăng nhập thành công!"
-
-authenticate = authenticate_user
-
-# --- BENCHMARK THỰC TẾ 100% CHO GIÁO VIÊN ---
-def get_real_benchmark_report():
-    conn = get_connection()
-    cur = conn.cursor()
-    # Tổng hợp trực tiếp từ submissions thực tế: số bài nộp thật, điểm thật, số bài hoàn thành
-    cur.execute("""
-        SELECT 
-            u.account_id,
-            u.full_name,
-            u.class_name,
-            u.status,
-            u.strikes,
-            u.is_locked,
-            COUNT(s.id) as total_submissions,
-            COALESCE(MAX(s.score), 0.0) as highest_score,
-            COALESCE(ROUND(AVG(s.score), 1), 0.0) as avg_score,
-            COUNT(DISTINCT CASE WHEN s.score >= 8.0 THEN s.exercise_id END) as passed_exercises
-        FROM users u
-        LEFT JOIN submissions s ON u.account_id = s.account_id
-        WHERE u.role = 'student'
-        GROUP BY u.account_id
-        ORDER BY u.class_name ASC, u.account_id ASC
-    """)
-    rows = cur.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-def get_all_students():
-    return get_real_benchmark_report()
-
 def get_locked_users():
     conn = get_connection()
     cur = conn.cursor()
@@ -336,11 +365,12 @@ def get_locked_users():
 def unlock_user(account_id):
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("UPDATE users SET is_locked = 0, strikes = 0, status = 'Bình thường' WHERE account_id = ?", (str(account_id),))
+    cur.execute("UPDATE users SET is_locked = 0, strikes = 0, status = CASE WHEN is_activated = 1 THEN 'Bình thường' ELSE 'Chưa kích hoạt' END WHERE account_id = ?", (str(account_id),))
     conn.commit()
     conn.close()
 
 def add_strike(account_id):
+    """Chỉ tăng strikes khi học sinh thực sự vi phạm trong giờ học"""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT strikes FROM users WHERE account_id = ?", (str(account_id),))
@@ -351,6 +381,23 @@ def add_strike(account_id):
         status = 'Tạm khóa' if is_locked else 'Cảnh báo'
         cur.execute("UPDATE users SET strikes = ?, is_locked = ?, status = ? WHERE account_id = ?", (new_strikes, is_locked, status, str(account_id)))
         conn.commit()
+    conn.close()
+
+def reset_all_data_to_clean():
+    """Hàm dành cho Giáo viên: Đặt lại toàn bộ dữ liệu kiểm thử về 0 sạch sẽ"""
+    conn = get_connection()
+    cur = conn.cursor()
+    # Xóa sạch toàn bộ bài nộp
+    cur.execute("DELETE FROM submissions")
+    # Đặt lại ma trận năng lực về 0
+    cur.execute("DELETE FROM student_competencies")
+    # Đặt lại trạng thái 400 học sinh về ban đầu (chưa kích hoạt, 0 lỗi, không khóa)
+    cur.execute("""
+        UPDATE users 
+        SET strikes = 0, is_locked = 0, is_activated = 0, status = 'Chưa kích hoạt' 
+        WHERE role = 'student'
+    """)
+    conn.commit()
     conn.close()
 
 def change_user_password(identifier, old_password, new_password):
