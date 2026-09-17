@@ -1,6 +1,9 @@
 import io
 import sys
 import re
+import random
+import builtins
+import sqlite3
 import streamlit as st
 import pandas as pd
 from src.exercises import REAL_EXERCISES
@@ -41,13 +44,53 @@ if "current_ex_id" not in st.session_state:
     st.session_state.current_ex_id = "C1_01"
 if "doing_exercise" not in st.session_state:
     st.session_state.doing_exercise = False
+if "show_test_runner" not in st.session_state:
+    st.session_state.show_test_runner = True
+
+# ==================== ĐỊNH DẠNG GIAO DIỆN CHUẨN MẪU ====================
+st.markdown("""
+<style>
+div.st-key-btn_submit_main button {
+    background-color: #f0ad4e !important;
+    color: white !important;
+    border-radius: 6px !important;
+    font-weight: 700 !important;
+    border: none !important;
+    height: 42px !important;
+}
+div.st-key-btn_toggle_runner button {
+    background-color: #449d44 !important;
+    color: white !important;
+    border: 2px solid #1e5a1e !important;
+    border-radius: 6px !important;
+    font-weight: 700 !important;
+    height: 42px !important;
+}
+div.st-key-btn_run_action button {
+    background-color: #5cb85c !important;
+    color: white !important;
+    border-radius: 6px !important;
+    font-weight: 700 !important;
+    border: none !important;
+    padding: 8px 30px !important;
+}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.custom-green-box) {
+    border: 2px solid #7bc143 !important;
+    border-radius: 24px !important;
+    padding: 16px 20px !important;
+    background-color: #fcfdfa !important;
+    margin-top: 15px !important;
+    margin-bottom: 20px !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ==================== DỮ LIỆU LÝ THUYẾT 30 BÀI SGK TIN HỌC 10 ====================
 LESSONS_DATA = {
-    "Bài 1: Thông tin và xử lý thông tin": "### 1. Thông tin và dữ liệu\n- Dữ liệu (Data): Số liệu, văn bản, âm thanh lưu trữ trên máy tính.\n- Đơn vị đo: Bit, Byte (1B = 8 bits), KB, MB, GB, TB.\n### 2. Quá trình xử lý\n- Thu nhận -> Lưu trữ -> Xử lý (CPU) -> Xuất kết quả (Màn hình, máy in).",
-    "Bài 2: Vai trò của thiết bị thông minh và tin học": "### 1. Thiết bị thông minh\n- Tự động kết nối và xử lý thông tin (Smartphone, Robot, Smart TV).\n### 2. Tác động của tin học\n- Thúc đẩy kinh tế số, xã hội số và chuyển đổi số quốc gia.",
-    "Bài 3: Một số kiểu kiến trúc máy tính": "### 1. Kiến trúc Von Neumann\n- Gồm: CPU (ALU, CU, Thanh ghi), Bộ nhớ trong (RAM, ROM), Hệ thống Vào/Ra, Bus liên kết.",
-    "Bài 4: Mạng máy tính và Internet": "### 1. Mạng máy tính & Internet\n- Mạng LAN, WAN và mạng toàn cầu Internet sử dụng giao thức TCP/IP, định danh qua địa chỉ IP.",
+    "Bài 1: Thông tin và xử lý thông tin": "### 1. Thông tin và dữ liệu\n- Dữ liệu: Số liệu, văn bản, âm thanh lưu trữ trên máy tính.\n- Đơn vị đo: Bit, Byte (1B = 8 bits), KB, MB, GB, TB.",
+    "Bài 2: Vai trò của thiết bị thông minh và tin học": "### 1. Thiết bị thông minh\n- Tự động kết nối và xử lý thông tin (Smartphone, Robot, Smart TV).",
+    "Bài 3: Một số kiểu kiến trúc máy tính": "### 1. Kiến trúc Von Neumann\n- Gồm: CPU, Bộ nhớ trong (RAM, ROM), Hệ thống Vào/Ra, Bus liên kết.",
+    "Bài 4: Mạng máy tính và Internet": "### 1. Mạng máy tính & Internet\n- Mạng toàn cầu Internet sử dụng giao thức TCP/IP, định danh qua địa chỉ IP.",
     "Bài 5: Dữ liệu trong máy tính và hệ số": "### 1. Hệ nhị phân (Binary)\n- Cơ số 2 gồm 0 và 1. Dùng bảng mã ASCII và Unicode (UTF-8) để mã hóa văn bản tiếng Việt.",
     "Bài 6: Dữ liệu âm thanh và hình ảnh": "### 1. Số hóa đa phương tiện\n- Điểm ảnh pixel (RGB). Âm thanh được lấy mẫu lượng tử hóa thành chuỗi bit.",
     "Bài 7: Phần mềm đồ họa Vector": "### 1. Đồ họa Vector (Inkscape)\n- Dựa trên công thức toán học, không bị vỡ nét khi phóng to co giãn kích thước.",
@@ -55,44 +98,174 @@ LESSONS_DATA = {
     "Bài 9: Sử dụng bảng tính điện tử nâng cao": "### 1. Công thức bảng tính\n- Địa chỉ tương đối (A1), tuyệt đối ($A$1), hỗn hợp ($A1). Các hàm SUM, AVERAGE, IF, COUNTIF.",
     "Bài 10: Trình diễn đa phương tiện": "### 1. Thiết kế trang chiếu\n- Độ tương phản, phân cấp thông tin thị giác, hiệu ứng slide hợp lý.",
     "Bài 11: An toàn thông tin và bản quyền": "### 1. An toàn không gian mạng\n- Phòng chống virus, Ransomware, Phishing. Tôn trọng bản quyền phần mềm mã nguồn mở.",
-    "Bài 12: Đạo đức, pháp luật môi trường số": "### 1. Ứng xử văn hóa số\n- Bảo vệ thông tin cá nhân, ứng xử văn minh trên mạng, tuân thủ Luật An ninh mạng.",
+    "Bài 12: Đạo đức, pháp luật môi trường số": "### 1. Ứng xử văn hóa số\n- Bảo vệ thông tin cá nhân, ứng xử văn minh trên không gian mạng.",
     "Bài 13: Cơ sở dữ liệu và hệ quản trị CSDL": "### 1. Khái niệm CSDL\n- CSDL lưu trữ dữ liệu có cấu trúc; hệ quản trị DBMS (SQLite, MySQL) xử lý truy vấn.",
     "Bài 14: Dịch vụ đám mây và IoT": "### 1. Đám mây & IoT\n- Cloud cung cấp tài nguyên trực tuyến; IoT kết nối vạn vật qua cảm biến.",
     "Bài 15: Trí tuệ nhân tạo (AI)": "### 1. Bản chất AI\n- Ngành khoa học máy tính mô phỏng quá trình tư duy, học tập và suy luận của con người.",
     "Bài 16: Ngôn ngữ lập trình bậc cao và Python": "### 1. Giới thiệu Python\n- Ngôn ngữ bậc cao, thông dịch, cú pháp rõ ràng.\n- Lệnh in ra màn hình: `print('Xin chào Python!')`",
-    "Bài 17: Biến và lệnh gán": "### 1. Biến & Kiểu dữ liệu\n- Không bắt đầu bằng số, không trùng từ khóa.\n- Kiểu dữ liệu: `int`, `float`, `str`, `bool`.\n- Phép toán: `+`, `-`, `*`, `/`, `//` (chia nguyên), `%` (chia dư), `**` (lũy thừa).",
-    "Bài 18: Các lệnh vào ra đơn giản": "### 1. Nhập và xuất dữ liệu\n- Nhập chuỗi: `s = input()`\n- Nhập số nguyên: `n = int(input())`\n- Nhập số thực: `x = float(input())`\n- Nhập nhiều số: `a, b = map(int, input().split())`",
-    "Bài 19: Câu lệnh rẽ nhánh if": "### 1. Cú pháp rẽ nhánh\n```python\nif điều_kiện:\n    khối_lệnh_1\nelif điều_kiện_khác:\n    khối_lệnh_2\nelse:\n    khối_lệnh_mặc_định\n```\nLưu ý: Bắt buộc thụt lề 4 khoảng trắng.",
-    "Bài 20: Câu lệnh lặp for": "### 1. Vòng lặp for\n```python\nfor i in range(start, stop, step):\n    khối_lệnh\n```\nHàm `range(n)` sinh dãy số từ 0 đến n-1.",
-    "Bài 21: Câu lệnh lặp while": "### 1. Vòng lặp while\n```python\nwhile điều_kiện:\n    khối_lệnh\n```\n`break` để dừng lặp; `continue` để chuyển sang lần lặp kế tiếp.",
+    "Bài 17: Biến và lệnh gán": "### 1. Biến & Kiểu dữ liệu\n- Tên biến không chứa dấu cách, không bắt đầu bằng chữ số.\n- Kiểu dữ liệu cơ bản: `int`, `float`, `str`, `bool`.\n- Phép toán: `+`, `-`, `*`, `/`, `//` (chia nguyên), `%` (chia dư).",
+    "Bài 18: Các lệnh vào ra đơn giản": "### 1. Nhập và xuất dữ liệu\n- Nhập chuỗi: `s = input()`\n- Nhập số nguyên: `n = int(input())`\n- Nhập số thực: `x = float(input())`\n- Xuất dữ liệu: `print(giá_trị)`",
+    "Bài 19: Câu lệnh rẽ nhánh if": "### 1. Cú pháp rẽ nhánh\n```python\nif điều_kiện:\n    khối_lệnh\n```\nLưu ý: Bắt buộc thụt lề 4 khoảng trắng.",
+    "Bài 20: Câu lệnh lặp for": "### 1. Vòng lặp for\n```python\nfor i in range(n):\n    khối_lệnh\n```",
+    "Bài 21: Câu lệnh lặp while": "### 1. Vòng lặp while\n```python\nwhile điều_kiện:\n    khối_lệnh\n```",
     "Bài 22: Kiểu dữ liệu danh sách (List)": "### 1. Khởi tạo danh sách\n`a = [10, 20, 30]`. Phần tử đầu: `a[0]`, phần tử cuối: `a[-1]`.",
-    "Bài 23: Thao tác trên dữ liệu danh sách": "### 1. Phương thức danh sách\n- `len(a)`, `a.append(x)`, `a.insert(i, x)`, `a.remove(x)`, `a.sort()`.",
-    "Bài 24: Xâu ký tự (String)": "### 1. Cấu trúc xâu\n- Xâu đặt trong cặp nháy đơn. Xâu trong Python là đối tượng bất biến.",
-    "Bài 25: Thao tác trên xâu ký tự": "### 1. Phương thức xử lý xâu\n- `s.split()`, `s.strip()`, `s.upper()`, `s.lower()`, `s.replace()`.",
+    "Bài 23: Thao tác trên dữ liệu danh sách": "### 1. Phương thức danh sách\n- `len(a)`, `a.append(x)`, `a.remove(x)`, `a.sort()`.",
+    "Bài 24: Xâu ký tự (String)": "### 1. Cấu trúc xâu\n- Xâu đặt trong cặp dấu nháy đơn `'...'`.",
+    "Bài 25: Thao tác trên xâu ký tự": "### 1. Phương thức xử lý xâu\n- `s.split()`, `s.strip()`, `s.upper()`, `s.lower()`.",
     "Bài 26: Hàm trong Python": "### 1. Định nghĩa hàm\n```python\ndef tên_hàm(tham_số):\n    khối_lệnh\n    return giá_trị\n```",
     "Bài 27: Tham số của hàm": "### 1. Tham số & Đối số\n- Hỗ trợ tham số mặc định: `def chao(ten='Bạn'):`",
-    "Bài 28: Phạm vi của biến": "### 1. Biến cục bộ & Toàn cục\n- Biến trong hàm là cục bộ. Dùng từ khóa `global` để chỉnh sửa biến bên ngoài hàm.",
-    "Bài 29: Nhận biết lỗi chương trình": "### 1. Ba loại lỗi chính\n- `SyntaxError`: Lỗi cú pháp.\n- `RuntimeError`: Lỗi thực thi (chia 0, truy xuất ngoài mảng).\n- `LogicError`: Lỗi sai thuật toán.",
-    "Bài 30: Kiểm thử và gỡ lỗi chương trình": "### 1. Kiểm thử & Gỡ lỗi\n- Kiểm tra trường hợp thông thường và trường hợp biên (số 0, số âm, danh sách rỗng)."
+    "Bài 28: Phạm vi của biến": "### 1. Biến cục bộ & Toàn cục\n- Biến trong hàm là cục bộ. Dùng `global` để chỉnh sửa biến ngoài hàm.",
+    "Bài 29: Nhận biết lỗi chương trình": "### 1. Ba loại lỗi chính\n- `SyntaxError`, `RuntimeError`, `LogicError`.",
+    "Bài 30: Kiểm thử và gỡ lỗi chương trình": "### 1. Kiểm thử\n- Kiểm tra trường hợp thông thường và trường hợp biên."
 }
 
-# ==================== CÚ PHÁP CHUẨN TỔNG QUÁT (KHÔNG GIẢI HỘ) ====================
-GENERIC_SYNTAX_TEMPLATES = {
-    "Syntax_Missing_Quotes": "print('nội_dung_văn_bản')",
-    "Syntax_Missing_Quotes_And_Cap": "print('nội_dung_văn_bản')",
-    "Syntax_Print_Capitalized": "print('nội_dung_văn_bản')",
-    "Syntax_Unclosed_Single_Quote": "print('nội_dung_văn_bản')",
-    "Syntax_Unclosed_Double_Quote": 'print("nội_dung_văn_bản")',
-    "Syntax_Unclosed_Paren": "print('nội_dung_văn_bản')",
-    "Syntax_Missing_Colon": "if <điều_kiện>:\n    <khối_lệnh_thực_thi>",
-    "Syntax_Indentation": "if <điều_kiện>:\n    <khối_lệnh_thụt_lề_4_khoảng_trắng>",
-    "Misconception_Equal_Operator": "if <tên_biến> == <giá_trị_so_sánh>:\n    <khối_lệnh>",
-    "Misconception_Type_Casting": "<tên_biến> = int(input())",
-    "Logic_Missing_Print": "print(<giá_trị_cần_in>)",
-    "Syntax_General": "# Cấu trúc chuẩn theo SGK Tin học 10"
-}
+# ==================== BỘ VIỆT HÓA LỖI HỆ THỐNG ====================
+def translate_system_error(err_str: str) -> str:
+    if not err_str:
+        return ""
+    err_lower = err_str.lower()
+    m_line = re.search(r"dòng (\d+)|line (\d+)", err_str)
+    line_str = f" tại dòng {m_line.group(1) or m_line.group(2)}" if m_line else ""
+    
+    if "invalid syntax" in err_lower or "syntaxerror" in err_lower:
+        return f"Sai quy tắc ngữ pháp câu lệnh{line_str}."
+    if "can't multiply sequence" in err_lower or "unsupported operand" in err_lower:
+        return "Sai kiểu dữ liệu: Dữ liệu từ lệnh input() là xâu văn bản, bắt buộc ép kiểu số trước khi tính toán."
+    if "invalid literal for int" in err_lower:
+        return "Sai kiểu dữ liệu: Dữ liệu nhập vào chứa số thập phân, bắt buộc dùng hàm float(input())."
+    if "nameerror" in err_lower:
+        m = re.search(r"name '([^']+)' is not defined", err_str)
+        var_name = f"`{m.group(1)}`" if m else "biến"
+        return f"Biến {var_name} chưa được tạo giá trị trước khi gọi."
+    if "was never closed" in err_lower or "unclosed" in err_lower:
+        if "(" in err_lower:
+            return "Câu lệnh thiếu dấu đóng ngoặc đơn `)`."
+        return "Xâu văn bản thiếu dấu đóng nháy đơn `'`."
+    if "unterminated string" in err_lower or "eol while scanning" in err_lower:
+        return "Xâu văn bản chưa đóng dấu nháy đơn `'` ở cuối dòng."
+    if "zerodivisionerror" in err_lower:
+        return "Phép toán chia cho số 0 vi phạm quy tắc toán học."
+    if "indentationerror" in err_lower:
+        return "Khối lệnh viết sai thụt lề 4 khoảng trắng."
+        
+    return "Câu lệnh dừng đột ngột do vi phạm cấu trúc SGK."
 
-# ==================== ĐỘNG CƠ CHẨN ĐOÁN SƯ PHẠM ====================
+# ==================== HÀM SO KHỚP KẾT QUẢ THÔNG MINH ====================
+def is_output_semantically_correct(actual_out: str, expected_out: str) -> bool:
+    act = actual_out.strip()
+    exp = expected_out.strip()
+    
+    if act == exp:
+        return True
+    
+    try:
+        exp_float = float(exp)
+        found_numbers = re.findall(r'[-+]?\d*\.?\d+', act)
+        for num_str in found_numbers:
+            try:
+                if float(num_str) == exp_float:
+                    return True
+            except ValueError:
+                continue
+    except ValueError:
+        if exp.lower() in act.lower():
+            return True
+
+    return False
+
+# ==================== ĐỘNG CƠ HƯỚNG DẪN TƯ DUY CHÍNH XÁC ====================
+def get_step_by_step_scaffolding(exercise_info: dict, diag_tag: str, error_msg: str) -> str:
+    if diag_tag == "NameError":
+        m_name = re.search(r"name '([^']+)' is not defined", error_msg)
+        var_n = f"'{m_name.group(1)}'" if m_name else "biến"
+        return f"💡 **Lỗi cụ thể:** Biến {var_n} chưa được khai báo hoặc chưa được đọc từ bàn phím. Em cần thêm lệnh `input()` ở đầu chương trình để gán giá trị cho biến này."
+    if diag_tag == "Print_Extra_Text":
+        return "💡 **Lỗi cụ thể:** Thuật toán đúng nhưng in thừa lời dẫn chữ. Máy chấm yêu cầu kết quả phải trần trụi (chỉ in giá trị số/biến)."
+    if diag_tag == "Type_Casting_Error":
+        return "💡 **Lỗi cụ thể:** Chưa ép kiểu dữ liệu `int()` hoặc `float()` cho hàm `input()`, dẫn đến lỗi phép tính số học."
+    if diag_tag == "Variable_Naming_Space":
+        return "💡 **Lỗi cụ thể:** Tên biến chứa khoảng trắng (dấu cách). Hãy viết liền hoặc dùng dấu gạch dưới `_`."
+    if diag_tag == "Syntax_Missing_Quotes" or diag_tag == "Syntax_Print_Capitalized":
+        return "💡 **Lỗi cụ thể:** Viết sai chính tả lệnh `print` hoặc thiếu cặp dấu nháy đơn `' '` bao quanh xâu kí tự."
+    if diag_tag == "IndentationError":
+        return "💡 **Lỗi cụ thể:** Sai quy tắc thụt lề khối lệnh (bắt buộc thụt lề 4 khoảng trắng)."
+    if diag_tag == "Anti_Hardcode_Violation":
+        return "💡 **Lỗi cụ thể:** Chưa sử dụng lệnh `input()` để đọc dữ liệu biến thiên từ bàn phím."
+
+    return "💡 **Lỗi cụ thể:** Kết quả chạy thử chưa khớp với bộ kiểm thử của đề bài. Em hãy kiểm tra lại biểu thức tính toán và cấu trúc lệnh `print()`."
+
+# ==================== TRỢ LÝ AI TRÒ CHUYỆN & HỎI ĐÁP TOÀN DIỆN ====================
+def generate_conversational_ai_response(prompt: str, curr_ex: dict, student_code: str) -> str:
+    p = prompt.lower()
+    ex_title = curr_ex.get('title', '')
+    ex_desc = curr_ex.get('desc', '')
+    
+    if any(w in p for w in ["chào", "hello", "hi", "cô ơi", "thầy ơi", "giúp em"]):
+        return f"Chào em! Thầy/Cô là Trợ lý Socratic AI. Em đang làm bài **'{ex_title}'**. Em đang gặp vướng mắc cụ thể ở dòng code nào hoặc cần thầy/cô giải thích ý tưởng phần nào, cứ nói cho thầy/cô biết nhé!"
+    
+    if "input" in p or "nhập" in p:
+        return (
+            "💡 **Giải đáp về lệnh input():**\n"
+            "- Hàm `input()` dùng để nhận dữ liệu bàn phím và luôn trả về xâu kí tự (`str`).\n"
+            "- Muốn tính toán số học, em bắt buộc bọc trong `int(input())` hoặc `float(input())`."
+        )
+        
+    if "print" in p or "in" in p:
+        return (
+            "💡 **Giải đáp về lệnh print():**\n"
+            "- Lệnh `print()` dùng để xuất kết quả ra màn hình.\n"
+            "- Cú pháp: `print(giá_trị)`."
+        )
+
+    return (
+        f"🤖 **Trợ lý Socratic AI:** Thầy/Cô đã ghi nhận câu hỏi của em liên quan đến bài **'{ex_title}'**.\n"
+        f"Mã nguồn hiện tại của em:\n```python\n{student_code}\n```\n"
+        f"👉 **Gợi ý hỗ trợ:** Để giải quyết vấn đề này, em hãy kiểm tra kỹ các biến đã được gán giá trị qua `input()` chưa, công thức toán học đã đúng thứ tự ưu tiên chưa và kết quả `print()` đã trần trụi chưa. Em cần thầy/cô soi giúp đoạn code cụ thể nào không?"
+    )
+
+# ==================== BỘ LỌC TỪ NGỮ THÔ TỤC & KHÓA TỨC THÌ ====================
+PROFANITY_LIST = [
+    "mẹ mày", "đm", "đmm", "vcl", "chó", "vl", "đĩ", "khùng", "đụ", "dkm", "clm",
+    "cặc", "lồn", "buồi", "óc chó", "đĩ khùng", "thằng chó", "mẹ m", "con mẹ",
+    "bố mày", "thằng điên", "đĩ mẹ", "mẹ kiếp", "đụ mẹ", "địt"
+]
+
+def check_profanity(text: str) -> bool:
+    t = text.lower()
+    for word in PROFANITY_LIST:
+        if word in t:
+            return True
+    return False
+
+# ==================== ĐỘNG CƠ THẨM ĐỊNH THỰC THI AN TOÀN ====================
+def execute_student_script(student_code: str, test_input_str: str) -> tuple[str, str]:
+    old_stdin, old_stdout = sys.stdin, sys.stdout
+    sys.stdin = io.StringIO(test_input_str)
+    buffer = io.StringIO()
+    sys.stdout = buffer
+
+    def isolated_input(prompt=""):
+        line = sys.stdin.readline()
+        return line.rstrip("\r\n")
+
+    err_msg = ""
+    out_res = ""
+    try:
+        builtins_dict = builtins.__dict__.copy()
+        builtins_dict["input"] = isolated_input
+        exec_scope = {"__builtins__": builtins_dict}
+        exec(student_code, exec_scope)
+        out_res = buffer.getvalue().strip()
+    except SyntaxError as se:
+        err_msg = f"SyntaxError: {se.msg} (dòng {se.lineno})"
+    except Exception as ex:
+        err_msg = f"{type(ex).__name__}: {str(ex)}"
+    finally:
+        sys.stdin, sys.stdout = old_stdin, old_stdout
+
+    return out_res, err_msg
+
+# ==================== ĐỘNG CƠ CHẨN ĐOÁN SƯ PHẠM ĐA LỚP ====================
 HEDGING_PATTERNS = [r"\bcó thể\b", r"\bcó lẽ\b", r"\bdường như\b", r"\bhình như\b", r"\bchắc là\b", r"\bđoán là\b"]
 
 def purge_hedging(text: str) -> str:
@@ -101,11 +274,32 @@ def purge_hedging(text: str) -> str:
         res = re.sub(p, "bắt buộc", res, flags=re.IGNORECASE)
     return res.strip()
 
-def diagnose_student_misconception(student_code, error_msg, actual_output, expected_output, exercise):
+def diagnose_student_misconception(student_code, error_msg, actual_output, exercise, passed_tests, total_tests):
     code_str = student_code.strip()
     lines = code_str.splitlines()
+    tests = exercise.get("tests", [])
+    desc_str = (exercise.get("desc", "") + " " + exercise.get("title", "")).lower()
+    has_input_req = any(bool(t.get("input", "").strip()) for t in tests) or ("nhập" in desc_str and "không cần nhập" not in desc_str)
 
-    # 1. Bắt lỗi thiếu cặp dấu nháy khi gọi hàm print
+    non_comment_lines = [l for l in lines if l.strip() and not l.strip().startswith("#")]
+    if not non_comment_lines:
+        return ("Chưa viết mã nguồn chương trình", "Trình soạn thảo chưa có câu lệnh Python nào để thực thi.", "Syntax_General")
+
+    for l_num, line in enumerate(lines, 1):
+        clean_l = line.strip()
+        if "=" in clean_l and not any(k in clean_l for k in ["==", "<=", ">=", "!=", "if ", "elif ", "while "]) and not clean_l.startswith("#"):
+            left_side = clean_l.split("=")[0].strip()
+            if " " in left_side and "," not in left_side and "[" not in left_side and "(" not in left_side:
+                return ("Tên biến chứa khoảng trắng", f"Tại dòng {l_num}: Tên biến `{left_side}` chứa dấu cách.", "Variable_Naming_Space")
+
+    if "input(" in code_str:
+        m_var = re.search(r'([a-zA-Z0-9_À-ỹ]+)\s*=\s*(?:[a-zA-Z0-9_]+\()?input\(', code_str)
+        if m_var:
+            assigned_var = m_var.group(1)
+            m_print_str = re.search(r'print\s*\(\s*([\'"][^\'"]+[\'"])\s*\)', code_str)
+            if m_print_str and assigned_var not in m_print_str.group(1):
+                return ("In xâu cố định thay vì in biến", f"Lệnh print đang in xâu cố định thay vì biến `{assigned_var}`.", "Print_Literal_Instead_Of_Var")
+
     has_print_call = bool(re.search(r'\b(print|Print|PRINT)\b', code_str))
     missing_quotes = False
     if has_print_call:
@@ -114,145 +308,79 @@ def diagnose_student_misconception(student_code, error_msg, actual_output, expec
             if m:
                 inside = m.group(1).strip()
                 if inside and ("'" not in inside and '"' not in inside):
-                    missing_quotes = True
-                    break
+                    if re.search(r'[a-zA-Z_À-ỹ]+\s+[a-zA-Z_À-ỹ]+', inside):
+                        missing_quotes = True
+                        break
 
     has_cap_print = bool(re.search(r'\b(Print|PRINT)\b', code_str))
-
-    # Trường hợp vừa viết hoa vừa thiếu dấu nháy
     if missing_quotes and has_cap_print:
-        return (
-            "Lệnh print viết hoa và thiếu cặp dấu nháy đơn ' '",
-            "Mã nguồn vi phạm 2 quy chuẩn SGK: 1) Tên lệnh in bắt buộc viết thường là `print`. 2) Dòng chữ in ra màn hình bắt buộc đặt trong cặp dấu nháy đơn `' '`.",
-            "Syntax_Missing_Quotes_And_Cap"
-        )
-
-    # Trường hợp thiếu cặp dấu nháy đơn
+        return ("Lệnh print viết hoa và thiếu nháy đơn", "Tên lệnh phải là print và xâu trong nháy.", "Syntax_Missing_Quotes")
     if missing_quotes:
-        return (
-            "Thiếu cặp dấu nháy đơn ' ' bao quanh xâu kí tự",
-            "Theo quy định tại Bài 16 SGK Tin học 10, dữ liệu dạng văn bản khi đưa vào lệnh print bắt buộc đặt trong cặp dấu nháy đơn `' '`. Tuyệt đối không để chữ trần trụi.",
-            "Syntax_Missing_Quotes"
-        )
-
-    # Trường hợp mở nháy nhưng chưa đóng nháy
+        return ("Thiếu cặp dấu nháy đơn ' '", "Văn bản trong print bắt buộc đặt trong nháy.", "Syntax_Missing_Quotes")
     if "unterminated string literal" in error_msg or "EOL while scanning string literal" in error_msg:
-        if '"' in code_str:
-            return (
-                "Chưa đóng dấu nháy kép \" ở cuối xâu kí tự",
-                "Văn bản đã mở dấu nháy kép nhưng thiếu dấu nháy kép đóng tương ứng. Bắt buộc thêm dấu nháy kép `\"` ở cuối dòng chữ.",
-                "Syntax_Unclosed_Double_Quote"
-            )
-        return (
-            "Chưa đóng dấu nháy đơn ' ở cuối xâu kí tự",
-            "Văn bản đã mở dấu nháy đơn nhưng thiếu dấu nháy đơn đóng tương ứng. Bắt buộc thêm dấu nháy đơn `'` ở cuối dòng chữ.",
-            "Syntax_Unclosed_Single_Quote"
-        )
-
-    # Trường hợp viết hoa chữ Print
+        return ("Chưa đóng dấu nháy đơn", "Thiếu dấu nháy đóng.", "Syntax_Missing_Quotes")
     if has_cap_print:
-        return (
-            "Sai chính tả từ khóa lệnh (Viết hoa chữ P)",
-            "Trong Python, tên lệnh phân biệt chữ hoa và chữ thường. Lệnh xuất ra màn hình bắt buộc viết thường toàn bộ là `print`.",
-            "Syntax_Print_Capitalized"
-        )
-
-    # Quên đóng ngoặc đơn
+        return ("Viết hoa từ khóa lệnh print", "Lệnh print bắt buộc viết thường.", "Syntax_Print_Capitalized")
     if "was never closed" in error_msg or ("(" in code_str and code_str.count("(") > code_str.count(")")):
-        return (
-            "Thiếu dấu đóng ngoặc đơn )",
-            "Mỗi dấu mở ngoặc đơn `(` bắt buộc có một dấu đóng ngoặc đơn `)` tương ứng ở cuối câu lệnh.",
-            "Syntax_Unclosed_Paren"
-        )
+        return ("Thiếu dấu đóng ngoặc đơn", "Thiếu ngoặc đơn `)`.", "Syntax_General")
 
-    # Thiếu dấu hai chấm
-    if "expected ':'" in error_msg or any(re.match(r'^\s*(if|elif|else|for|while|def)\b', l) and not l.strip().endswith(":") for l in lines):
-        return (
-            "Thiếu dấu hai chấm : ở cuối câu lệnh điều khiển",
-            "Theo quy chuẩn cú pháp SGK Tin học 10, cuối câu lệnh điều khiển bắt buộc kết thúc bằng dấu hai chấm `:`. ",
-            "Syntax_Missing_Colon"
-        )
-
-    # Thụt lề
-    if "IndentationError" in error_msg:
-        return (
-            "Lỗi cấu trúc thụt lề dòng lệnh",
-            "Các câu lệnh con bên trong khối lệnh (sau dấu `:`) bắt buộc thụt lề thống nhất 4 khoảng trắng.",
-            "Syntax_Indentation"
-        )
-
-    # Nhầm gán = và so sánh ==
-    if re.search(r'\bif\b.*(?<!=)=(?!=)', code_str):
-        return (
-            "Nhầm lẫn giữa phép gán = và phép so sánh bằng ==",
-            "Dấu `=` dùng để gán giá trị cho biến. Để so sánh bằng nhau trong mệnh đề điều kiện `if`, bắt buộc dùng cặp dấu `==`.",
-            "Misconception_Equal_Operator"
-        )
-
-    # Quên ép kiểu input()
-    if "input()" in code_str and ("+" in code_str) and ("int(" not in code_str and "float(" not in code_str):
-        return (
-            "Chưa ép kiểu dữ liệu cho lệnh input()",
-            "Lệnh input() luôn trả về dữ liệu kiểu xâu kí tự. Để tính toán cộng trừ số học, bắt buộc sử dụng hàm ép kiểu `int(input())` theo Bài 18 SGK.",
-            "Misconception_Type_Casting"
-        )
-
-    # Lỗi cú pháp chung: Triệt tiêu hoàn toàn chuỗi perhaps
-    if "SyntaxError" in error_msg:
-        return (
-            "Sai quy chuẩn cú pháp câu lệnh",
-            "Câu lệnh vi phạm quy tắc cấu trúc Python. Bắt buộc kiểm tra: từ khóa viết chữ thường, văn bản có cặp dấu nháy đơn `' '` và đóng đủ ngoặc đơn `)`.",
-            "Syntax_General"
-        )
-
-    # Chưa in kết quả
-    if not error_msg and actual_output == "":
-        return (
-            "Chưa có lệnh in kết quả ra màn hình",
-            "Chương trình đã chạy xong nhưng chưa hiển thị dữ liệu. Bắt buộc sử dụng lệnh `print(...)` để xuất kết quả ra màn hình.",
-            "Logic_Missing_Print"
-        )
-
-    # Sai kết quả tính toán
-    if not error_msg and actual_output != expected_output:
-        return (
-            "Kết quả tính toán chưa chính xác",
-            f"Kết quả thực tế là `{actual_output}`, nhưng đề bài yêu cầu chính xác là `{expected_output}`. Em hãy kiểm tra lại biểu thức tính toán.",
-            "Logic_Incorrect_Result"
-        )
-
-    # Lỗi thực thi khác
     if error_msg:
-        return (
-            "Lỗi thực thi chương trình",
-            "Chương trình phát sinh lỗi khi chạy. Bắt buộc kiểm tra lại kiểu dữ liệu đầu vào và các phép toán.",
-            "Runtime_General"
-        )
+        err_low = error_msg.lower()
+        m_ln = re.search(r"dòng (\d+)|line (\d+)", error_msg)
+        ln_str = f" tại dòng {m_ln.group(1) or m_ln.group(2)}" if m_ln else ""
+        
+        if "nameerror" in err_low:
+            m_name = re.search(r"name '([^']+)' is not defined", error_msg)
+            var_n = f"`{m_name.group(1)}`" if m_name else "biến"
+            return (f"Sử dụng biến {var_n} chưa được khai báo", f"Biến {var_n} chưa được tạo giá trị trước khi gọi.", "NameError")
+        if "invalid literal for int" in err_low:
+            return ("Sai kiểu dữ liệu khi ép kiểu", "Dữ liệu nhập chứa số thập phân, cần dùng float().", "Type_Casting_Error")
+        if "unsupported operand type" in err_low or "can't multiply sequence" in err_low:
+            return ("Chưa ép kiểu dữ liệu số cho input()", "Dữ liệu input() là xâu kí tự, cần bọc hàm số học.", "Type_Casting_Error")
+        if "zerodivisionerror" in err_low:
+            return ("Thực hiện phép chia cho số 0", "Mẫu số bắt buộc phải khác 0.", "Syntax_General")
+        if "indentationerror" in err_low:
+            return (f"Sai quy tắc thụt lề{ln_str}", "Thụt lề khối lệnh bắt buộc 4 khoảng trắng.", "IndentationError")
+        if "syntaxerror" in err_low or "invalid syntax" in err_low:
+            return (f"Sai cú pháp câu lệnh{ln_str}", "Vi phạm quy tắc cú pháp Python.", "SyntaxError")
+        
+        return (f"Lỗi gián đoạn chương trình{ln_str}", translate_system_error(error_msg), "Syntax_General")
 
-    return ("Chưa đạt yêu cầu", "Em hãy đối chiếu lại đề bài và cấu trúc câu lệnh theo SGK.", "General")
+    if has_input_req and "input(" not in code_str:
+        return ("Gian lận in cứng kết quả", "Đề bài yêu cầu dùng lệnh `input()` để đọc dữ liệu.", "Anti_Hardcode_Violation")
 
-def generate_scaffolding_guidance(attempt_count, diagnosis, exercise):
+    if actual_output == "":
+        return ("Chưa có lệnh in kết quả", "Chương trình chưa dùng lệnh `print()` để xuất dữ liệu.", "Logic_Missing_Print")
+
+    if passed_tests < total_tests:
+        if tests:
+            first_exp = str(tests[0].get("expected", "")).strip()
+            exp_nums = re.findall(r'[-+]?\d*\.?\d+', first_exp)
+            if exp_nums:
+                all_found = all(num in actual_output for num in exp_nums)
+                if all_found and len(actual_output) > len(first_exp):
+                    return ("Lỗi in thừa lời dẫn văn bản", "Thuật toán đúng nhưng máy chấm không cho phép in thêm chữ giải thích.", "Print_Extra_Text")
+        
+        return ("Kết quả tính toán chưa chính xác", "Chương trình chưa cho ra kết quả chính xác trên các ca kiểm thử.", "Logic_Incorrect_Result")
+
+    return ("Chưa đạt yêu cầu", "Em hãy đối chiếu lại đề bài.", "General")
+
+def generate_scaffolding_guidance(attempt_count, diagnosis, exercise, error_msg=""):
     title, diag_text, diag_tag = diagnosis
-    clean_diag = purge_hedging(diag_text)
-    
-    generic_syntax = GENERIC_SYNTAX_TEMPLATES.get(
-        diag_tag,
-        GENERIC_SYNTAX_TEMPLATES["Syntax_General"]
-    )
+    step_guidance = get_step_by_step_scaffolding(exercise, diag_tag, error_msg)
     
     msg = (
-        f"🧑‍🏫 **Định hướng chuẩn SGK Tin 10:**\n"
-        f"- **Vấn đề phát hiện:** {title}.\n"
-        f"- **Quy chuẩn bắt buộc:** {clean_diag}\n"
-        f"👉 **Cú pháp chuẩn:**\n"
-        f"```python\n{generic_syntax}\n```"
+        f"🧑‍🏫 **Chẩn đoán Lỗi & Định hướng Socratic (SGK Tin 10):**\n"
+        f"- **Vấn đề nhận diện:** {title}.\n"
+        f"- **Phân tích:** {purge_hedging(diag_text)}\n\n"
+        f"{step_guidance}"
     )
     return purge_hedging(msg)
 
 # ==================== 1. GIAO DIỆN ĐĂNG NHẬP ====================
 if not st.session_state.authenticated:
     st.markdown("""
-        <div style='background-color: #007bc7; padding: 22px 28px; border-radius: 8px; margin-bottom: 30px; text-align: center; box-shadow: 0 2px 8px rgba(0, 123, 199, 0.15);'>
+        <div style='background-color: #007bc7; padding: 22px 28px; border-radius: 8px; margin-bottom: 30px; text-align: center;'>
             <h2 style='color: white; margin: 0; font-size: 1.4rem; font-weight: 700;'>💻 EDUCODER 10 - TRỢ LÝ HỌC LẬP TRÌNH CÁ NHÂN HÓA TIN HỌC 10</h2>
         </div>
     """, unsafe_allow_html=True)
@@ -279,6 +407,7 @@ if not st.session_state.authenticated:
 user = st.session_state.user
 is_teacher = (user.get("role") == "teacher")
 clean_name = user['full_name'].replace("Thầy/Cô", "").replace("Cô", "").replace("Thầy", "").strip()
+is_locked = (user.get("status") in ["Tạm khóa", "locked"] or user.get("strikes", 0) >= 2)
 
 if is_teacher:
     user_tag = f"👨‍🏫 Thầy/Cô {clean_name}"
@@ -318,6 +447,10 @@ if st.session_state.nav_page == "🏠 Trang chủ":
     if not is_teacher:
         st.markdown(f"### Xin chào **{user['full_name']}**!")
         
+        if is_locked:
+            st.error("🚨 **TÀI KHOẢN ĐANG BỊ TẠM KHÓA DO VI PHẠM KỶ LUẬT ỨNG XỬ.** Vui lòng liên hệ Thầy/Cô bộ môn để mở khóa.")
+            st.stop()
+
         with st.container(border=True):
             st.markdown("#### Ma trận Năng lực Lập trình Thực tế của Em")
             st.caption("Chỉ số % thành thạo được tính toán thực tế 100% từ kết quả bài nộp của em trong CSDL.")
@@ -361,11 +494,8 @@ if st.session_state.nav_page == "🏠 Trang chủ":
                         st.session_state.messages = []
                         st.session_state.nav_page = "📝 Kho Bài Tập Python"
                         st.rerun()
-
     else:
         st.markdown(f"### 🏠 Bảng điều khiển Giảng dạy - Thầy/Cô {clean_name}")
-        st.info("Hệ thống Trợ lý học tập cá nhân hóa EduCoder 10 đang giám sát tiến trình học tập của học sinh.")
-        
         c1, c2, c3 = st.columns(3)
         with c1:
             with st.container(border=True):
@@ -377,14 +507,14 @@ if st.session_state.nav_page == "🏠 Trang chủ":
         with c2:
             with st.container(border=True):
                 st.markdown("#### 📝 Kho Bài Tập")
-                st.write("Ngân hàng bài tập theo mức độ.")
+                st.write("Ngân hàng bài tập theo mức độ nhận thức.")
                 if st.button("Xem Bài tập ➡️", key="btn_t_practice", use_container_width=True):
                     st.session_state.nav_page = "📝 Kho Bài Tập Python"
                     st.rerun()
         with c3:
             with st.container(border=True):
                 st.markdown("#### 📊 Báo cáo Benchmark")
-                st.write("Dữ liệu đánh giá thực tế của học sinh.")
+                st.write("Dữ liệu đánh giá học sinh thời gian thực.")
                 if st.button("Xem Báo cáo ➡️", key="btn_t_bench", use_container_width=True):
                     st.session_state.nav_page = "📊 Báo cáo Benchmark"
                     st.rerun()
@@ -400,9 +530,14 @@ elif st.session_state.nav_page == "📖 Lý thuyết SGK":
 
 # ----------------- TAB 3: KHO BÀI TẬP PYTHON -----------------
 elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
+    if is_locked and not is_teacher:
+        st.error("🚨 **TÀI KHOẢN ĐÃ BỊ TẠM KHÓA DO VI PHẠM KỶ LUẬT.** Vui lòng liên hệ Thầy/Cô để được mở khóa.")
+        st.stop()
+
     if st.session_state.doing_exercise and st.session_state.current_ex_id:
         curr_ex = next((item for item in REAL_EXERCISES if item["id"] == st.session_state.current_ex_id), REAL_EXERCISES[0])
-        
+        tests = curr_ex.get("tests", [])
+
         col_back, _ = st.columns([1, 4])
         with col_back:
             if st.button("⬅️ Quay lại danh sách bài", key="btn_back_list"):
@@ -412,66 +547,120 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
         st.markdown(f"### 💻 LÀM BÀI: [{curr_ex['id']}] {curr_ex['title']}")
         st.caption(f"Trọng tâm kiến thức: **{curr_ex['concept']}**")
 
-        col_left, col_right = st.columns([1.2, 1])
+        col_left, col_right = st.columns([1.25, 1])
 
         with col_left:
             with st.container(border=True):
                 st.markdown(f"#### 🎯 ĐỀ BÀI: {curr_ex['title']} ({curr_ex['difficulty']})")
                 st.write(curr_ex['desc'])
 
-            default_placeholder = f"# Viết mã nguồn cho bài {curr_ex['id']}\n"
-            student_code = st.text_area(label="Trình soạn thảo", value=default_placeholder, height=200, label_visibility="collapsed")
-            btn_submit = st.button("🚀 Nộp bài & Chấm điểm", type="primary", use_container_width=True)
+            ed_key = f"code_editor_{curr_ex['id']}"
+            if ed_key not in st.session_state:
+                st.session_state[ed_key] = f"# Viết mã nguồn cho bài {curr_ex['id']}\n"
+
+            student_code = st.text_area(label="Trình soạn thảo mã nguồn Python", value=st.session_state[ed_key], key=ed_key, height=180)
+
+            col_b1, col_b2 = st.columns([1, 1.2])
+            
+            with col_b1:
+                st.markdown('<div class="st-key-btn_submit_main">', unsafe_allow_html=True)
+                btn_submit = st.button("Chấm bài", use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            with col_b2:
+                st.markdown('<div class="st-key-btn_toggle_runner">', unsafe_allow_html=True)
+                toggle_label = "Đóng chạy thử" if st.session_state.show_test_runner else "Mở chạy thử"
+                if st.button(toggle_label, use_container_width=True):
+                    st.session_state.show_test_runner = not st.session_state.show_test_runner
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            if st.session_state.show_test_runner:
+                in_state_key = f"runner_input_val_{curr_ex['id']}"
+                out_state_key = f"runner_output_val_{curr_ex['id']}"
+                
+                default_test_in = tests[0]["input"] if tests else ""
+                if in_state_key not in st.session_state:
+                    st.session_state[in_state_key] = default_test_in
+                if out_state_key not in st.session_state:
+                    st.session_state[out_state_key] = ""
+
+                with st.container(border=True):
+                    st.markdown('<div class="custom-green-box"></div>', unsafe_allow_html=True)
+                    
+                    c_in, c_out = st.columns(2)
+                    with c_in:
+                        st.text_area(
+                            "Input:",
+                            key=in_state_key,
+                            height=90,
+                            placeholder="Nhập dữ liệu vào đây..."
+                        )
+                    with c_out:
+                        st.text_area(
+                            "Output:",
+                            value=st.session_state[out_state_key],
+                            height=90,
+                            disabled=True,
+                            placeholder="Kết quả xuất ra màn hình..."
+                        )
+                    
+                    c_sp1, c_mid_btn, c_sp2 = st.columns([1.5, 1, 1.5])
+                    with c_mid_btn:
+                        st.markdown('<div class="st-key-btn_run_action">', unsafe_allow_html=True)
+                        if st.button("Chạy thử", use_container_width=True):
+                            current_input_feed = st.session_state.get(in_state_key, "").strip()
+                            if not current_input_feed and tests:
+                                current_input_feed = tests[0].get("input", "")
+                                st.session_state[in_state_key] = current_input_feed
+                            
+                            r_out, r_err = execute_student_script(student_code, current_input_feed)
+                            if r_err:
+                                st.session_state[out_state_key] = f"Lỗi: {translate_system_error(r_err)}"
+                            else:
+                                st.session_state[out_state_key] = r_out if r_out else "(Chương trình chạy xong nhưng không xuất gì ra màn hình)"
+                            st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
 
             if btn_submit:
-                all_tests = curr_ex.get("tests", [])
+                all_tests = list(tests)
+                
+                if curr_ex['id'] == "C1_21":
+                    rw, rh = round(random.uniform(2.0, 9.0), 1), round(random.uniform(2.0, 9.0), 1)
+                    all_tests.append({"input": f"{rw}\n{rh}", "expected": str(round(rw * rh, 2))})
+                elif curr_ex['id'] == "C1_31":
+                    rsec = random.randint(100, 86400)
+                    all_tests.append({"input": str(rsec), "expected": f"{rsec // 3600} giờ {(rsec % 3600) // 60} phút {rsec % 60} giây"})
+
                 passed_tests = 0
                 test_logs = []
                 first_error = ""
                 first_actual = ""
-                first_expected = ""
+                total_t = len(all_tests)
 
                 for idx, t in enumerate(all_tests):
-                    old_stdin = sys.stdin
-                    old_stdout = sys.stdout
-                    sys.stdin = io.StringIO(t["input"])
-                    buffer = io.StringIO()
-                    sys.stdout = buffer
-                    
-                    err_msg = None
-                    try:
-                        exec_scope = {}
-                        exec(student_code, exec_scope)
-                        actual_out = buffer.getvalue().strip()
-                    except SyntaxError as se:
-                        err_msg = f"SyntaxError: {se.msg} (dòng {se.lineno})"
-                    except Exception as e:
-                        err_msg = f"{type(e).__name__}: {str(e)}"
-                    finally:
-                        sys.stdin = old_stdin
-                        sys.stdout = old_stdout
+                    inp_data = t.get("input", "")
+                    actual_out, err_msg = execute_student_script(student_code, inp_data)
 
                     if err_msg:
                         if not first_error:
                             first_error = err_msg
-                        clean_log = re.sub(r"Perhaps you forgot.*", "", err_msg, flags=re.IGNORECASE).strip()
-                        test_logs.append(f"Test #{idx + 1}: ❌ Lỗi cú pháp dòng lệnh -> {clean_log}")
+                        vn_err = translate_system_error(err_msg)
+                        test_logs.append(f"Ca kiểm thử #{idx + 1}: ❌ {vn_err}")
                     else:
-                        exp_out = str(t["expected"]).strip()
-                        if actual_out == exp_out:
+                        exp_out = str(t.get("expected", "")).strip()
+                        if is_output_semantically_correct(actual_out, exp_out):
                             passed_tests += 1
-                            test_logs.append(f"Test #{idx + 1}: ✔️ Chính xác (Kết quả: {actual_out})")
+                            test_logs.append(f"Ca kiểm thử #{idx + 1}: ✔️ Chính xác")
                         else:
                             if not first_actual:
                                 first_actual = actual_out
-                                first_expected = exp_out
-                            test_logs.append(f"Test #{idx + 1}: ❌ Sai kết quả (Nhận được: '{actual_out}', Yêu cầu: '{exp_out}')")
+                            test_logs.append(f"Ca kiểm thử #{idx + 1}: ❌ Chưa chính xác")
 
-                total_t = len(all_tests)
                 score = round((passed_tests / total_t) * 10.0, 1) if total_t > 0 else 0.0
 
                 diag_title, diag_desc, diag_tag = diagnose_student_misconception(
-                    student_code, first_error, first_actual, first_expected, curr_ex
+                    student_code, first_error, first_actual, curr_ex, passed_tests, total_t
                 )
 
                 attempt_count = get_exercise_submission_count(user.get('account_id'), curr_ex['id']) + 1
@@ -486,11 +675,11 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
                 )
 
                 if passed_tests == total_t:
-                    st.success(f"🎉 Hoàn thành xuất sắc! - {passed_tests}/{total_t} Tests: {score}/10 Điểm")
-                    guidance = "🎉 **Chúc mừng em!** Em đã viết chương trình hoàn toàn chính xác theo đúng chuẩn SGK."
+                    st.success(f"🎉 Hoàn thành xuất sắc! - Đạt chuẩn SGK Tin 10: {score}/10 Điểm")
+                    guidance = "🎉 **Chúc mừng em!** Chương trình chạy chính xác hoàn toàn theo đúng yêu cầu đề bài."
                 else:
-                    st.warning(f"⚠️ Chưa đạt yêu cầu - {passed_tests}/{total_t} Tests: {score}/10 Điểm")
-                    guidance = generate_scaffolding_guidance(attempt_count, (diag_title, diag_desc, diag_tag), curr_ex)
+                    st.warning(f"⚠️ Chưa đạt yêu cầu - {passed_tests}/{total_t} Ca kiểm thử: {score}/10 Điểm")
+                    guidance = generate_scaffolding_guidance(attempt_count, (diag_title, diag_desc, diag_tag), curr_ex, first_error)
 
                 st.session_state.messages.append({"role": "assistant", "content": guidance})
                 st.code("\n".join(test_logs), language="text")
@@ -509,32 +698,25 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
                     st.session_state.messages = []
                     st.rerun()
 
-            with st.container(height=420):
+            with st.container(height=480):
                 if not st.session_state.messages:
-                    st.caption("Thầy/Cô Trợ lý AI định vị chính xác lỗi cú pháp SGK và định hướng phương pháp, không giải hộ bài.")
+                    st.caption("Thầy/Cô Trợ lý AI sẵn sàng trò chuyện, giải đáp mọi thắc mắc và hướng dẫn từng bước.")
                 for m in st.session_state.messages:
                     with st.chat_message(m["role"]):
                         st.markdown(m["content"])
 
-            if user_prompt := st.chat_input("Hỏi AI về quy tắc cú pháp SGK hoặc lỗi câu lệnh..."):
+            if user_prompt := st.chat_input("Nhập câu hỏi, thắc mắc hoặc trò chuyện với AI..."):
                 st.session_state.messages.append({"role": "user", "content": user_prompt})
 
-                bad_words = ["mẹ mày", "đm", "đmm", "vcl", "chó", "vl"]
-                if any(bw in user_prompt.lower() for bw in bad_words):
+                if check_profanity(user_prompt):
                     if not is_teacher:
                         add_strike(user.get('account_id'))
-                    ai_ans = "🚨 **CẢNH BÁO VI PHẠM KỶ LUẬT!** Em bắt buộc phải giữ chuẩn mực văn hóa ứng xử trong giờ học."
+                        st.session_state.user["strikes"] = st.session_state.user.get("strikes", 0) + 1
+                        st.session_state.user["status"] = "Tạm khóa"
+                    st.error("🚨 **TÀI KHOẢN ĐÃ BỊ KHÓA NGAY LẬP TỨC!** Em đã vi phạm quy chuẩn văn hóa ứng xử.")
+                    st.rerun()
                 else:
-                    p_lower = user_prompt.lower()
-                    if "chỉ cách làm" in p_lower or "làm sao" in p_lower or "hướng dẫn" in p_lower or "cú pháp" in p_lower or "dấu" in p_lower:
-                        ai_ans = (
-                            f"🧑‍🏫 **Quy chuẩn SGK Tin 10:**\n"
-                            f"- Yêu cầu: {curr_ex['desc']}\n"
-                            f"👉 **Cú pháp chuẩn:**\n"
-                            f"```python\nprint('nội_dung_cần_in')\n```"
-                        )
-                    else:
-                        ai_ans = f"🤖 **Trợ lý SGK Tin 10:** Em đang thực hành bài '{curr_ex['title']}'. Hãy nộp bài để hệ thống tự động bóc tách điểm sai và hướng dẫn sửa bằng tiếng Việt."
+                    ai_ans = generate_conversational_ai_response(user_prompt, curr_ex, student_code)
                 
                 ai_ans = purge_hedging(ai_ans)
                 st.session_state.messages.append({"role": "assistant", "content": ai_ans})
@@ -578,7 +760,8 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
                     for idx, t in enumerate(chosen_exercise.get("tests", [])):
                         inp = str(t.get("input", "")).strip()
                         if inp:
-                            st.caption(f"- **Test #{idx + 1}:** Input = `{inp}` ➔ Output = `{t['expected']}`")
+                            clean_inp = inp.replace('\n', ' ; ')
+                            st.caption(f"- **Test #{idx + 1}:** Input = `{clean_inp}` ➔ Output = `{t['expected']}`")
                         else:
                             st.caption(f"- **Test #{idx + 1}:** Output = `{t['expected']}`")
                     
@@ -596,7 +779,6 @@ elif st.session_state.nav_page == "📊 Báo cáo Benchmark" and is_teacher:
     
     if real_data:
         df_bench = pd.DataFrame(real_data)
-        
         active_count = len(df_bench[df_bench["total_submissions"] > 0])
         total_subs = int(df_bench["total_submissions"].sum())
         locked_count = len(df_bench[df_bench["status_display"] == "Tạm khóa"])
@@ -702,7 +884,7 @@ elif st.session_state.nav_page == user_tag:
                 st.write(f"**Mã số học sinh:** `{user.get('account_id', '')}`")
                 st.write(f"**Lớp học:** {user.get('class_name', '10')}")
                 st.write(f"**Trạng thái tài khoản:** {user.get('status', 'Bình thường')}")
-                st.write(f"**Số lần vi phạm kỷ luật:** `{user.get('strikes', 0)}/3`")
+                st.write(f"**Số lần vi phạm kỷ luật:** `{user.get('strikes', 0)}/2`")
                 
                 highest_score = get_student_highest_score(user.get('account_id'))
                 comps = get_student_competencies(user.get('account_id'))
