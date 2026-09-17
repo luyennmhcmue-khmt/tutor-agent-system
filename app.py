@@ -1,5 +1,6 @@
 import io
 import sys
+import re
 import streamlit as st
 import pandas as pd
 from src.exercises import REAL_EXERCISES
@@ -75,47 +76,63 @@ LESSONS_DATA = {
     "Bài 30: Kiểm thử và gỡ lỗi chương trình": "### 1. Kiểm thử & Gỡ lỗi\n- Kiểm tra trường hợp thông thường và trường hợp biên (số 0, số âm, danh sách rỗng)."
 }
 
-# ==================== CHẨN ĐOÁN QUAN NIỆM SAI LẦM ====================
+# ==================== ĐỘNG CƠ CHUẨN HÓA AI & CHẨN ĐOÁN (BÁM SÁT 100% SGK) ====================
+HEDGING_PATTERNS = [r"\bcó thể\b", r"\bcó lẽ\b", r"\bdường như\b", r"\bhình như\b", r"\bchắc là\b", r"\bđoán là\b"]
+
+def purge_hedging(text: str) -> str:
+    res = text
+    for p in HEDGING_PATTERNS:
+        res = re.sub(p, "bắt buộc", res, flags=re.IGNORECASE)
+    return res.strip()
+
 def diagnose_student_misconception(student_code, error_msg, actual_output, expected_output, exercise):
     code_str = student_code.strip()
+    
+    # 1. Bẫy lỗi phân biệt chữ hoa chữ thường trong từ khóa lệnh print
+    if any(kw in code_str for kw in ["Print", "PRINT", "PRint", "PrinT"]):
+        return (
+            "Sai chính tả từ khóa lệnh (Viết hoa chữ P)", 
+            "Trong Python, tên hàm và từ khóa phân biệt chữ hoa và chữ thường. Lệnh in ra màn hình bắt buộc phải viết thường toàn bộ là `print`.", 
+            "Syntax_Case_Sensitivity"
+        )
+
     if "SyntaxError" in error_msg:
         if "was never closed" in error_msg or ("(" in code_str and code_str.count("(") > code_str.count(")")):
-            return ("Quên đóng ngoặc đơn `)`", "Em đang mở ngoặc `(` nhưng quên đóng dấu `)` ở cuối câu lệnh.", "Syntax_Unclosed_Paren")
+            return ("Quên đóng ngoặc đơn `)`", "Em đang mở ngoặc `(` nhưng bắt buộc phải đóng dấu `)` ở cuối câu lệnh theo quy định SGK.", "Syntax_Unclosed_Paren")
         if "expected ':'" in error_msg or ("if " in code_str and ":" not in code_str):
-            return ("Thiếu dấu hai chấm `:`", "Sau câu lệnh if, else, for, while, def bắt buộc phải kết thúc bằng dấu hai chấm `:`. Em hãy bổ sung nhé!", "Syntax_Missing_Colon")
-        return ("Sai cú pháp câu lệnh", f"Chương trình gặp lỗi: {error_msg}. Em hãy kiểm tra lại chính tả từ khóa.", "Syntax_General")
+            return ("Thiếu dấu hai chấm `:`", "Sau câu lệnh điều kiện hoặc vòng lặp, bắt buộc phải kết thúc bằng dấu hai chấm `:`. Em hãy bổ sung ngay!", "Syntax_Missing_Colon")
+        return ("Sai cú pháp câu lệnh", "Câu lệnh vi phạm quy tắc cấu trúc của ngôn ngữ Python. Em bắt buộc phải viết đúng theo mẫu cú pháp chuẩn trong SGK.", "Syntax_General")
         
     if "input()" in code_str and ("+" in code_str) and ("int(" not in code_str and "float(" not in code_str):
-        return ("Quên ép kiểu int() / float()", "Hàm `input()` mặc định trả về chuỗi văn bản. Khi em cộng `a + b`, Python sẽ nối hai chuỗi lại với nhau thay vì tính tổng số học. Em hãy dùng `int(input())` nhé!", "Misconception_Type_Casting")
+        return ("Quên ép kiểu int() / float()", "Hàm `input()` mặc định trả về chuỗi văn bản (str). Để tính toán số học, bắt buộc sử dụng hàm ép kiểu `int(input())` hoặc `float(input())`.", "Misconception_Type_Casting")
 
     if "if " in code_str and "=" in code_str and "==" not in code_str and "!=" not in code_str and ">" not in code_str and "<" not in code_str:
-        return ("Nhầm giữa phép gán `=` và so sánh `==`", "Dấu `=` dùng để gán giá trị cho biến. Để so sánh bằng nhau trong câu lệnh if, em phải dùng hai dấu bằng `==`.", "Misconception_Equal_Operator")
+        return ("Nhầm giữa phép gán `=` và so sánh `==`", "Dấu `=` là lệnh gán giá trị cho biến. Để thực hiện phép so sánh bằng trong mệnh đề điều kiện, bắt buộc phải dùng cặp dấu bằng `==`.", "Misconception_Equal_Operator")
 
     if not error_msg:
         if actual_output == "":
-            return ("Chưa xuất kết quả ra màn hình", "Chương trình chưa in kết quả. Em hãy dùng lệnh `print(...)` để xuất kết quả ra màn hình nhé!", "Logic_Missing_Print")
-        return ("Kết quả chưa chính xác", f"Kết quả nhận được là `{actual_output}`, yêu cầu đúng là `{expected_output}`. Em hãy kiểm tra lại phép tính.", "Logic_Incorrect_Result")
+            return ("Chưa xuất kết quả ra màn hình", "Chương trình chưa xuất kết quả. Em bắt buộc phải dùng lệnh `print(...)` để in kết quả ra màn hình.", "Logic_Missing_Print")
+        return ("Kết quả chưa chính xác", f"Kết quả thực tế là `{actual_output}`, yêu cầu chính xác theo đề bài là `{expected_output}`. Em hãy kiểm tra lại logic phép toán.", "Logic_Incorrect_Result")
 
-    return ("Lỗi thực thi", f"Lỗi: {error_msg}", "Runtime_General")
+    return ("Lỗi thực thi", "Chương trình phát sinh lỗi khi thực thi. Em hãy đối chiếu lại cấu trúc lệnh với sách giáo khoa.", "Runtime_General")
 
 def generate_scaffolding_guidance(attempt_count, diagnosis, exercise):
     title, diag_text, _ = diagnosis
-    if attempt_count == 1:
-        return f"🧑‍🏫 **Gợi ý phản tư (Lần nộp 1):**\n- Em đang gặp vấn đề: **{title}**.\n- {diag_text}\n👉 Hãy thử quan sát lại câu lệnh và sửa lại nhé!"
-    elif attempt_count == 2:
-        return f"🧑‍🏫 **Định vị điểm nghẽn (Lần nộp 2):**\n- Vấn đề: **{title}**.\n- {diag_text}\n💡 **Gợi ý phương pháp:** `{exercise['hint']}`"
-    else:
-        return f"🧑‍🏫 **Giàn giáo tư duy (Lần nộp {attempt_count}):**\n- Em hãy làm theo 3 bước:\n  1. Nhập dữ liệu và ép kiểu đúng yêu cầu.\n  2. Thực hiện phép toán: `{exercise['hint']}`.\n  3. Dùng lệnh `print(...)` xuất kết quả."
+    clean_diag = purge_hedging(diag_text)
+    
+    # AI trả lời trực diện trọng tâm, cung cấp ngay cú pháp chuẩn, tuyệt đối không lan man
+    msg = f"🧑‍🏫 **Định hướng chuẩn SGK Tin 10:**\n- **Điểm sai:** {title}.\n- **Quy chuẩn bắt buộc:** {clean_diag}\n👉 **Cú pháp chuẩn áp dụng:**\n```python\n{exercise['hint']}\n```"
+    return purge_hedging(msg)
 
 # ==================== 1. GIAO DIỆN ĐĂNG NHẬP ====================
 if not st.session_state.authenticated:
     st.markdown("""
-        <div style='background-color: #0284c7; padding: 16px; border-radius: 8px; margin-bottom: 25px;'>
-            <h2 style='color: white; margin: 0; text-align: center;'>💻 EDUCODER 10 - TRỢ LÝ HỌC LẬP TRÌNH CÁ NHÂN HÓA TIN HỌC 10</h2>
+        <div style='background-color: #007bc7; padding: 22px 28px; border-radius: 8px; margin-bottom: 30px; text-align: center; box-shadow: 0 2px 8px rgba(0, 123, 199, 0.15);'>
+            <h2 style='color: white; margin: 0; font-size: 1.4rem; font-weight: 700;'>💻 EDUCODER 10 - TRỢ LÝ HỌC LẬP TRÌNH CÁ NHÂN HÓA TIN HỌC 10</h2>
         </div>
     """, unsafe_allow_html=True)
     
-    col_l1, col_l2, col_l3 = st.columns([1, 1.2, 1])
+    col_l1, col_l2, col_l3 = st.columns([1, 1.25, 1])
     with col_l2:
         with st.container(border=True):
             st.markdown("### 🔐 Đăng Nhập Hệ Thống")
@@ -147,7 +164,7 @@ else:
     nav_options = ["🏠 Trang chủ", "📖 Lý thuyết SGK", "📝 Kho Bài Tập Python", user_tag]
 
 st.markdown("""
-    <div style='background-color: #0284c7; padding: 14px; border-radius: 8px; margin-bottom: 20px;'>
+    <div style='background-color: #007bc7; padding: 14px; border-radius: 8px; margin-bottom: 20px;'>
         <h3 style='color: white; margin: 0;'>💻 EDUCODER 10 - TRỢ LÝ HỌC LẬP TRÌNH CÁ NHÂN HÓA TIN HỌC 10</h3>
     </div>
 """, unsafe_allow_html=True)
@@ -171,14 +188,14 @@ if selected_nav != st.session_state.nav_page:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ----------------- TAB 1: TRANG CHỦ (MA TRẬN NĂNG LỰC THỰC TẾ) -----------------
+# ----------------- TAB 1: TRANG CHỦ -----------------
 if st.session_state.nav_page == "🏠 Trang chủ":
     if not is_teacher:
         st.markdown(f"### Xin chào **{user['full_name']}**!")
         
         with st.container(border=True):
             st.markdown("#### Ma trận Năng lực Lập trình Thực tế của Em")
-            st.caption("Chỉ số % thành thạo được tính toán thực tế 100% từ kết quả bài nộp của em trong CSDL (không có điểm ảo).")
+            st.caption("Chỉ số % thành thạo được tính toán thực tế 100% từ kết quả bài nộp của em trong CSDL.")
             
             competencies = get_student_competencies(user["account_id"])
             cols_comp = st.columns(len(competencies))
@@ -201,9 +218,7 @@ if st.session_state.nav_page == "🏠 Trang chủ":
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        st.markdown("#### 🚀 Lộ trình Học tập Thích ứng Hôm nay (AI Tutor đề xuất theo năng lực thật)")
-        st.caption("Dựa trên tiến độ bài làm và các lỗ hổng kiến thức đã được ghi nhận, Trợ lý AI thiết kế lộ trình 3 bước:")
-        
+        st.markdown("#### 🚀 Lộ trình Học tập Thích ứng Hôm nay")
         recommendations = get_adaptive_recommendation(user["account_id"], REAL_EXERCISES)
         cols_rec = st.columns(len(recommendations))
         
@@ -249,7 +264,7 @@ if st.session_state.nav_page == "🏠 Trang chủ":
                     st.session_state.nav_page = "📊 Báo cáo Benchmark"
                     st.rerun()
 
-# ----------------- TAB 2: LÝ THUYẾT SGK (30 BÀI) -----------------
+# ----------------- TAB 2: LÝ THUYẾT SGK -----------------
 elif st.session_state.nav_page == "📖 Lý thuyết SGK":
     st.markdown("### 📖 CỐT LÕI KIẾN THỨC SGK TIN HỌC 10")
     lesson_keys = list(LESSONS_DATA.keys())
@@ -258,7 +273,7 @@ elif st.session_state.nav_page == "📖 Lý thuyết SGK":
         st.markdown(f"## 📘 {selected_lesson}")
         st.markdown(LESSONS_DATA[selected_lesson])
 
-# ----------------- TAB 3: KHO BÀI TẬP PYTHON (200 BÀI & CHẤM ĐIỂM THỰC TẾ) -----------------
+# ----------------- TAB 3: KHO BÀI TẬP PYTHON -----------------
 elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
     if st.session_state.doing_exercise and st.session_state.current_ex_id:
         curr_ex = next((item for item in REAL_EXERCISES if item["id"] == st.session_state.current_ex_id), REAL_EXERCISES[0])
@@ -278,7 +293,7 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
             with st.container(border=True):
                 st.markdown(f"#### 🎯 ĐỀ BÀI: {curr_ex['title']} ({curr_ex['difficulty']})")
                 st.write(curr_ex['desc'])
-                st.caption(f"💡 **Gợi ý phương pháp:** {curr_ex['hint']}")
+                st.caption(f"💡 **Cú pháp chuẩn SGK bắt buộc:** `{curr_ex['hint']}`")
 
             default_placeholder = f"# Viết mã nguồn cho bài {curr_ex['id']}\n"
             student_code = st.text_area(label="Trình soạn thảo", value=default_placeholder, height=200, label_visibility="collapsed")
@@ -293,7 +308,6 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
                 first_expected = ""
 
                 for idx, t in enumerate(all_tests):
-                    # Mock stdin và stdout chống treo khi có input()
                     old_stdin = sys.stdin
                     old_stdout = sys.stdout
                     sys.stdin = io.StringIO(t["input"])
@@ -337,7 +351,6 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
 
                 attempt_count = get_exercise_submission_count(user.get('account_id'), curr_ex['id']) + 1
                 
-                # Lưu vào CSDL và tự động tính toán lại ma trận năng lực thật
                 save_submission(
                     user.get('account_id'), 
                     curr_ex['id'], 
@@ -349,8 +362,7 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
 
                 if passed_tests == total_t:
                     st.success(f"🎉 Hoàn thành xuất sắc! - {passed_tests}/{total_t} Tests: {score}/10 Điểm")
-                    st.toast("🌟 Năng lực thực tế của em đã được cập nhật thành công!")
-                    guidance = "🎉 **Chúc mừng em!** Em đã giải quyết bài toán hoàn toàn chính xác. Năng lực của em trong Ma trận đã được cộng điểm thực tế!"
+                    guidance = purge_hedging("🎉 **Chúc mừng em!** Em đã giải quyết bài toán hoàn toàn chính xác theo đúng chuẩn sách giáo khoa.")
                 else:
                     st.warning(f"⚠️ Chưa đạt yêu cầu - {passed_tests}/{total_t} Tests: {score}/10 Điểm")
                     guidance = generate_scaffolding_guidance(attempt_count, (diag_title, diag_desc, diag_tag), curr_ex)
@@ -360,8 +372,8 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
 
                 if passed_tests < total_t:
                     with st.container(border=True):
-                        st.markdown("##### 🔍 Chẩn đoán Nhận thức từ Trợ lý Sư phạm:")
-                        st.info(f"**Vấn đề phát hiện:** {diag_title}\n\n**Lời khuyên:** {diag_desc}")
+                        st.markdown("##### 🔍 Chẩn đoán Nhận thức chuẩn SGK:")
+                        st.info(f"**Vấn đề phát hiện:** {diag_title}\n\n**Quy chuẩn bắt buộc:** {purge_hedging(diag_desc)}")
 
         with col_right:
             c_head, c_btn_cl = st.columns([3, 1])
@@ -374,26 +386,27 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
 
             with st.container(height=420):
                 if not st.session_state.messages:
-                    st.caption("Thầy/Cô Trợ lý AI sẵn sàng định vị lỗi nhận thức và gợi mở phương pháp giải giúp em đạt 10/10 điểm!")
+                    st.caption("Thầy/Cô Trợ lý AI sẵn sàng định vị lỗi cú pháp SGK và định hướng phương pháp chính xác!")
                 for m in st.session_state.messages:
                     with st.chat_message(m["role"]):
                         st.markdown(m["content"])
 
-            if user_prompt := st.chat_input("Hỏi AI về phương pháp giải hoặc nguyên lý..."):
+            if user_prompt := st.chat_input("Hỏi AI về cú pháp SGK hoặc phương pháp giải..."):
                 st.session_state.messages.append({"role": "user", "content": user_prompt})
 
                 bad_words = ["mẹ mày", "đm", "đmm", "vcl", "chó", "vl"]
                 if any(bw in user_prompt.lower() for bw in bad_words):
                     if not is_teacher:
                         add_strike(user.get('account_id'))
-                    ai_ans = "🚨 **CẢNH BÁO VI PHẠM KỶ LUẬT!** Em cần giữ chuẩn mực văn hóa ứng xử trong giờ học."
+                    ai_ans = "🚨 **CẢNH BÁO VI PHẠM KỶ LUẬT!** Em bắt buộc phải giữ chuẩn mực văn hóa ứng xử trong giờ học."
                 else:
                     p_lower = user_prompt.lower()
-                    if "chỉ cách làm" in p_lower or "làm sao" in p_lower or "hướng dẫn" in p_lower:
-                        ai_ans = f"🧑‍🏫 **Phương pháp giải bài [{curr_ex['id']}]:**\n\n- Yêu cầu: {curr_ex['desc']}\n- Gợi ý: `{curr_ex['hint']}`\nEm hãy tự tay viết lệnh theo gợi ý nhé!"
+                    if "chỉ cách làm" in p_lower or "làm sao" in p_lower or "hướng dẫn" in p_lower or "cú pháp" in p_lower:
+                        ai_ans = f"🧑‍🏫 **Quy chuẩn SGK cho bài [{curr_ex['id']}]:**\n- Yêu cầu trọng tâm: {curr_ex['desc']}\n- Cú pháp chuẩn bắt buộc:\n```python\n{curr_ex['hint']}\n```"
                     else:
-                        ai_ans = f"🤖 **Trợ lý gợi ý:** Em đang thực hành bài '{curr_ex['title']}'. Hãy nộp bài để Thầy/Cô tự động chẩn đoán điểm nghẽn giúp em!"
-
+                        ai_ans = f"🤖 **Trợ lý SGK Tin 10:** Em đang thực hành bài '{curr_ex['title']}'. Hãy nộp bài để hệ thống tự động chẩn đoán điểm sai theo đúng sách giáo khoa."
+                
+                ai_ans = purge_hedging(ai_ans)
                 st.session_state.messages.append({"role": "assistant", "content": ai_ans})
                 st.rerun()
 
@@ -441,7 +454,7 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
                         st.session_state.messages = []
                         st.rerun()
 
-# ----------------- TAB 4: BÁO CÁO BENCHMARK THỰC TẾ (CHỈ GIÁO VIÊN) -----------------
+# ----------------- TAB 4: BÁO CÁO BENCHMARK -----------------
 elif st.session_state.nav_page == "📊 Báo cáo Benchmark" and is_teacher:
     st.markdown("### 📊 BÁO CÁO BENCHMARK")
     
@@ -450,10 +463,8 @@ elif st.session_state.nav_page == "📊 Báo cáo Benchmark" and is_teacher:
     if real_data:
         df_bench = pd.DataFrame(real_data)
         
-        # Thống kê KPI thực tế 100%
         active_count = len(df_bench[df_bench["total_submissions"] > 0])
         total_subs = int(df_bench["total_submissions"].sum())
-        avg_score_all = round(df_bench[df_bench["total_submissions"] > 0]["avg_score"].mean(), 1) if active_count > 0 else 0.0
         locked_count = len(df_bench[df_bench["status_display"] == "Tạm khóa"])
         
         k1, k2, k3, k4 = st.columns(4)
@@ -471,7 +482,6 @@ elif st.session_state.nav_page == "📊 Báo cáo Benchmark" and is_teacher:
         with col_f2:
             search_name = st.text_input("Tìm kiếm theo Tên hoặc Mã học sinh:", placeholder="Ví dụ: Trần Minh Đức hoặc 10a1_01")
 
-        # Lọc dữ liệu
         df_view = df_bench.copy()
         if selected_c != "Tất cả các lớp":
             df_view = df_view[df_view["class_name"] == selected_c]
@@ -482,14 +492,12 @@ elif st.session_state.nav_page == "📊 Báo cáo Benchmark" and is_teacher:
                 df_view["account_id"].str.lower().str.contains(q)
             ]
 
-        # Định dạng chuẩn sư phạm: nếu chưa nộp bài hiển thị "-"
         def format_score(row, field):
             return str(row[field]) if row["total_submissions"] > 0 else "-"
 
         df_view["highest_display"] = df_view.apply(lambda r: format_score(r, "highest_score"), axis=1)
         df_view["avg_display"] = df_view.apply(lambda r: format_score(r, "avg_score"), axis=1)
 
-        # Trình bày bảng
         df_display = df_view[[
             "account_id", "full_name", "class_name", "status_display", "total_submissions", "passed_exercises", "highest_display", "avg_display"
         ]].rename(columns={
@@ -507,11 +515,10 @@ elif st.session_state.nav_page == "📊 Báo cáo Benchmark" and is_teacher:
         df_display.index = range(1, len(df_display) + 1)
         df_display.index.name = "STT"
         st.dataframe(df_display, use_container_width=True, height=520)
-        st.caption("Dữ liệu được cập nhật tự động và phản ánh chính xác kết quả thực tế của từng học sinh.")
     else:
         st.info("Chưa có dữ liệu học sinh trong hệ thống.")
 
-# ----------------- TAB 5: HỒ SƠ CÁ NHÂN & PHÂN QUYỀN -----------------
+# ----------------- TAB 5: HỒ SƠ CÁ NHÂN & ĐỔI MẬT KHẨU -----------------
 elif st.session_state.nav_page == user_tag:
     st.markdown(f"### {clean_name}")
     col_p1, col_p2 = st.columns(2)
@@ -543,7 +550,7 @@ elif st.session_state.nav_page == user_tag:
 
         with col_p2:
             with st.container(border=True):
-                st.markdown("#### 🔑 Đổi mật khẩu Giáo viên")
+                st.markdown("#### 🔑 Đổi mật khẩu Thầy/Cô")
                 t_old = st.text_input("Mật khẩu hiện tại:", type="password", key="t_old_pwd")
                 t_new = st.text_input("Mật khẩu mới:", type="password", key="t_new_pwd")
                 t_conf = st.text_input("Xác nhận mật khẩu mới:", type="password", key="t_conf_pwd")
@@ -552,7 +559,7 @@ elif st.session_state.nav_page == user_tag:
                     if t_new == t_conf and change_user_password(ident, t_old, t_new):
                         st.success("Đổi mật khẩu thành công!")
                     else:
-                        st.error("Thông tin không chính xác.")
+                        st.error("Thông tin không chính xác hoặc mật khẩu mới chưa khớp.")
     else:
         with col_p1:
             with st.container(border=True):
@@ -560,11 +567,9 @@ elif st.session_state.nav_page == user_tag:
                 st.write(f"**Họ và tên:** {user.get('full_name', '')}")
                 st.write(f"**Mã số học sinh:** `{user.get('account_id', '')}`")
                 st.write(f"**Lớp học:** {user.get('class_name', '10')}")
-                st.write(f"**Email trường học:** `{user.get('account_id')}@school.edu.vn`")
                 st.write(f"**Trạng thái tài khoản:** {user.get('status', 'Bình thường')}")
                 st.write(f"**Số lần vi phạm kỷ luật:** `{user.get('strikes', 0)}/3`")
                 
-                # Bổ sung thống kê học tập thực tế của học sinh
                 highest_score = get_student_highest_score(user.get('account_id'))
                 comps = get_student_competencies(user.get('account_id'))
                 total_passed = sum(c['passed_count'] for c in comps)
@@ -585,9 +590,9 @@ elif st.session_state.nav_page == user_tag:
                     if s_new == s_conf and change_user_password(ident, s_old, s_new):
                         st.success("Đổi mật khẩu thành công!")
                     else:
-                        st.error("Thông tin không chính xác.")
+                        st.error("Thông tin không chính xác hoặc mật khẩu mới chưa khớp.")
 
-    st.markdown("---")
+    st.markdown("---")  
     if st.button("🚪 Đăng Xuất Khỏi Hệ Thống", type="secondary", use_container_width=True):
         st.session_state.user = None
         st.session_state.authenticated = False
