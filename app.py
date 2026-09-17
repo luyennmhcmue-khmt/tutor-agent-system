@@ -119,7 +119,7 @@ LESSONS_DATA = {
     "Bài 30: Kiểm thử và gỡ lỗi chương trình": "### 1. Kiểm thử\n- Kiểm tra trường hợp thông thường và trường hợp biên."
 }
 
-# ==================== BỘ VIỆT HÓA LỖI HỆ THỐNG ====================
+# ==================== BỘ VIỆT HÓA LỖI HỆ THỐNG (TUYỆT ĐỐI KHÔNG DÙNG 'HOẶC', 'HAY') ====================
 def translate_system_error(err_str: str) -> str:
     if not err_str:
         return ""
@@ -173,26 +173,26 @@ def is_output_semantically_correct(actual_out: str, expected_out: str) -> bool:
 
     return False
 
-# ==================== ĐỘNG CƠ HƯỚNG DẪN TƯ DUY CHÍNH XÁC ====================
+# ==================== ĐỘNG CƠ HƯỚNG DẪN TƯ DUY TỪNG BƯỚC ====================
 def get_step_by_step_scaffolding(exercise_info: dict, diag_tag: str, error_msg: str) -> str:
     if diag_tag == "NameError":
         m_name = re.search(r"name '([^']+)' is not defined", error_msg)
         var_n = f"'{m_name.group(1)}'" if m_name else "biến"
-        return f"💡 **Lỗi cụ thể:** Biến {var_n} chưa được khai báo hoặc chưa được đọc từ bàn phím. Em cần thêm lệnh `input()` ở đầu chương trình để gán giá trị cho biến này."
+        return f"💡 **Lỗi cụ thể:** Biến {var_n} chưa được khai báo. Em bắt buộc phải viết câu lệnh gán giá trị từ bàn phím `input()` cho biến này ở phía trên trước khi sử dụng."
     if diag_tag == "Print_Extra_Text":
-        return "💡 **Lỗi cụ thể:** Thuật toán đúng nhưng in thừa lời dẫn chữ. Máy chấm yêu cầu kết quả phải trần trụi (chỉ in giá trị số/biến)."
+        return "💡 **Lỗi cụ thể:** Thuật toán tính toán chính xác nhưng lệnh print in thừa lời dẫn văn bản. Máy chấm tự động yêu cầu kết quả phải trần trụi (chỉ in giá trị số)."
     if diag_tag == "Type_Casting_Error":
-        return "💡 **Lỗi cụ thể:** Chưa ép kiểu dữ liệu `int()` hoặc `float()` cho hàm `input()`, dẫn đến lỗi phép tính số học."
+        return "💡 **Lỗi cụ thể:** Chưa bọc hàm ép kiểu `int()` hoặc `float()` bao quanh lệnh `input()`."
     if diag_tag == "Variable_Naming_Space":
-        return "💡 **Lỗi cụ thể:** Tên biến chứa khoảng trắng (dấu cách). Hãy viết liền hoặc dùng dấu gạch dưới `_`."
+        return "💡 **Lỗi cụ thể:** Tên biến chứa khoảng trắng (dấu cách). Em bắt buộc viết liền và dùng dấu gạch dưới `_`."
     if diag_tag == "Syntax_Missing_Quotes" or diag_tag == "Syntax_Print_Capitalized":
-        return "💡 **Lỗi cụ thể:** Viết sai chính tả lệnh `print` hoặc thiếu cặp dấu nháy đơn `' '` bao quanh xâu kí tự."
+        return "💡 **Lỗi cụ thể:** Viết sai chính tả lệnh `print` hoặc thiếu cặp dấu nháy đơn `' '`."
     if diag_tag == "IndentationError":
-        return "💡 **Lỗi cụ thể:** Sai quy tắc thụt lề khối lệnh (bắt buộc thụt lề 4 khoảng trắng)."
+        return "💡 **Lỗi cụ thể:** Sai quy tắc thụt lề khối lệnh (bắt buộc đúng chuẩn 4 khoảng trắng)."
     if diag_tag == "Anti_Hardcode_Violation":
         return "💡 **Lỗi cụ thể:** Chưa sử dụng lệnh `input()` để đọc dữ liệu biến thiên từ bàn phím."
 
-    return "💡 **Lỗi cụ thể:** Kết quả chạy thử chưa khớp với bộ kiểm thử của đề bài. Em hãy kiểm tra lại biểu thức tính toán và cấu trúc lệnh `print()`."
+    return "💡 **Lỗi cụ thể:** Kết quả thực thi chưa khớp với bộ kiểm thử. Em hãy kiểm tra lại biểu thức tính toán và tên biến."
 
 # ==================== TRỢ LÝ AI TRÒ CHUYỆN & HỎI ĐÁP TOÀN DIỆN ====================
 def generate_conversational_ai_response(prompt: str, curr_ex: dict, student_code: str) -> str:
@@ -201,26 +201,26 @@ def generate_conversational_ai_response(prompt: str, curr_ex: dict, student_code
     ex_desc = curr_ex.get('desc', '')
     
     if any(w in p for w in ["chào", "hello", "hi", "cô ơi", "thầy ơi", "giúp em"]):
-        return f"Chào em! Thầy/Cô là Trợ lý Socratic AI. Em đang làm bài **'{ex_title}'**. Em đang gặp vướng mắc cụ thể ở dòng code nào hoặc cần thầy/cô giải thích ý tưởng phần nào, cứ nói cho thầy/cô biết nhé!"
+        return f"Chào em! Thầy/Cô là Trợ lý Socratic AI. Em đang làm bài **'{ex_title}'**. Em đang gặp vướng mắc cụ thể ở dòng code nào, cứ nói cho thầy/cô biết nhé!"
     
     if "input" in p or "nhập" in p:
         return (
             "💡 **Giải đáp về lệnh input():**\n"
-            "- Hàm `input()` dùng để nhận dữ liệu bàn phím và luôn trả về xâu kí tự (`str`).\n"
-            "- Muốn tính toán số học, em bắt buộc bọc trong `int(input())` hoặc `float(input())`."
+            "- Hàm `input()` nhận dữ liệu bàn phím và trả về xâu kí tự (`str`).\n"
+            "- Tính toán số học bắt buộc bọc trong `int(input())` hoặc `float(input())`."
         )
         
     if "print" in p or "in" in p:
         return (
             "💡 **Giải đáp về lệnh print():**\n"
-            "- Lệnh `print()` dùng để xuất kết quả ra màn hình.\n"
-            "- Cú pháp: `print(giá_trị)`."
+            "- Lệnh `print()` xuất kết quả ra màn hình.\n"
+            "- Cú pháp chuẩn: `print(giá_trị)`."
         )
 
     return (
-        f"🤖 **Trợ lý Socratic AI:** Thầy/Cô đã ghi nhận câu hỏi của em liên quan đến bài **'{ex_title}'**.\n"
+        f"🤖 **Trợ lý Socratic AI:** Thầy/Cô đã ghi nhận câu hỏi của em về bài **'{ex_title}'**.\n"
         f"Mã nguồn hiện tại của em:\n```python\n{student_code}\n```\n"
-        f"👉 **Gợi ý hỗ trợ:** Để giải quyết vấn đề này, em hãy kiểm tra kỹ các biến đã được gán giá trị qua `input()` chưa, công thức toán học đã đúng thứ tự ưu tiên chưa và kết quả `print()` đã trần trụi chưa. Em cần thầy/cô soi giúp đoạn code cụ thể nào không?"
+        f"👉 **Gợi ý hỗ trợ:** Em hãy kiểm tra kỹ các biến đã được gán giá trị qua `input()` chưa, công thức toán học đã đúng chưa và lệnh `print()` đã in trần trụi chưa. Em cần thầy/cô soi giúp đoạn code cụ thể nào không?"
     )
 
 # ==================== BỘ LỌC TỪ NGỮ THÔ TỤC & KHÓA TỨC THÌ ====================
@@ -265,7 +265,7 @@ def execute_student_script(student_code: str, test_input_str: str) -> tuple[str,
 
     return out_res, err_msg
 
-# ==================== ĐỘNG CƠ CHẨN ĐOÁN SƯ PHẠM ĐA LỚP ====================
+# ==================== ĐỘNG CƠ CHẨN ĐOÁN SƯ PHẠM (TUYỆT ĐỐI KHÔNG DÙNG 'HOẶC', 'HAY') ====================
 HEDGING_PATTERNS = [r"\bcó thể\b", r"\bcó lẽ\b", r"\bdường như\b", r"\bhình như\b", r"\bchắc là\b", r"\bđoán là\b"]
 
 def purge_hedging(text: str) -> str:
@@ -290,7 +290,7 @@ def diagnose_student_misconception(student_code, error_msg, actual_output, exerc
         if "=" in clean_l and not any(k in clean_l for k in ["==", "<=", ">=", "!=", "if ", "elif ", "while "]) and not clean_l.startswith("#"):
             left_side = clean_l.split("=")[0].strip()
             if " " in left_side and "," not in left_side and "[" not in left_side and "(" not in left_side:
-                return ("Tên biến chứa khoảng trắng", f"Tại dòng {l_num}: Tên biến `{left_side}` chứa dấu cách.", "Variable_Naming_Space")
+                return ("Tên biến chứa khoảng trắng", f"Tại dòng {l_num}: Tên biến `{left_side}` chứa dấu cách không hợp lệ.", "Variable_Naming_Space")
 
     if "input(" in code_str:
         m_var = re.search(r'([a-zA-Z0-9_À-ỹ]+)\s*=\s*(?:[a-zA-Z0-9_]+\()?input\(', code_str)
@@ -298,7 +298,7 @@ def diagnose_student_misconception(student_code, error_msg, actual_output, exerc
             assigned_var = m_var.group(1)
             m_print_str = re.search(r'print\s*\(\s*([\'"][^\'"]+[\'"])\s*\)', code_str)
             if m_print_str and assigned_var not in m_print_str.group(1):
-                return ("In xâu cố định thay vì in biến", f"Lệnh print đang in xâu cố định thay vì biến `{assigned_var}`.", "Print_Literal_Instead_Of_Var")
+                return ("In xâu cố định thay vì in biến", f"Lệnh print in xâu cố định thay vì biến `{assigned_var}`.", "Print_Literal_Instead_Of_Var")
 
     has_print_call = bool(re.search(r'\b(print|Print|PRINT)\b', code_str))
     missing_quotes = False
@@ -645,8 +645,7 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
                     if err_msg:
                         if not first_error:
                             first_error = err_msg
-                        vn_err = translate_system_error(err_msg)
-                        test_logs.append(f"Ca kiểm thử #{idx + 1}: ❌ {vn_err}")
+                        test_logs.append(f"Ca kiểm thử #{idx + 1}: ❌ Chưa chính xác")
                     else:
                         exp_out = str(t.get("expected", "")).strip()
                         if is_output_semantically_correct(actual_out, exp_out):
