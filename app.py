@@ -136,47 +136,12 @@ def select_working_gemini_model(api_key: str):
         pass
     return "models/gemini-1.5-flash-latest"
 
-# ==================== CƠ CHẾ AI SOCRATIC CHUYÊN GIA (TỰ ĐỘNG CHỌN MODEL FLASH) ====================
-def get_verified_gemini_key() -> str:
-    """Đảm bảo luôn lấy được API Key hợp lệ."""
-    try:
-        if "GEMINI_API_KEY" in st.secrets:
-            return st.secrets["GEMINI_API_KEY"]
-    except Exception:
-        pass
-
-    env_key = os.getenv("GEMINI_API_KEY")
-    if env_key:
-        return env_key
-
-    return "AIzaSyAYSe1T2oxmcmZ7MX5-FhhHNqL8jAuIuvA"
-
-
-def get_prioritized_models(api_key: str) -> list:
-    """Lấy danh sách model thực tế từ Google và ưu tiên các dòng Flash miễn phí."""
-    try:
-        genai.configure(api_key=api_key)
-        all_models = [
-            m.name for m in genai.list_models()
-            if "generateContent" in m.supported_generation_methods
-        ]
-        
-        # Sắp xếp ưu tiên: Flash lên đầu, đẩy Pro (limit 0) xuống cuối cùng
-        def sort_key(name: str):
-            n = name.lower()
-            is_pro = "pro" in n
-            is_flash = "flash" in n
-            is_exp = "exp" in n or "preview" in n
-            return (is_pro, not is_flash, is_exp, name)
-
-        sorted_list = sorted(all_models, key=sort_key)
-        if sorted_list:
-            return sorted_list
-    except Exception:
-        pass
-    
-    # Dự phòng danh sách chuẩn nếu không thể list model
-    return ["models/gemini-2.0-flash", "models/gemini-1.5-flash", "models/gemini-flash"]
+MY_GEMINI_KEYS = [
+    "AIzaSyCQdszrpQyh2wUq2iAZPzJoUgVlf1lmwiE",
+    "AIzaSyDVe6hz98Dc20Iscj0qP5WGM8IHR2FmSp8",
+    "AIzaSyDLkga_xRitsjHk8kSt8sZCvT5fbLCuZJc",
+    "AIzaSyBF7fvwWKPXdPxF5uTXBuqjy5C7MdL9YLI"
+]
 
 
 def generate_socratic_ai_response(
@@ -186,81 +151,73 @@ def generate_socratic_ai_response(
     chat_history: list = None,
     runtime_err: str = ""
 ) -> str:
-    """Tự động kết nối model Flash khả dụng và phản hồi như giáo viên thực thụ."""
-    api_key = get_verified_gemini_key()
-    genai.configure(api_key=api_key)
-
     teacher_instruction = (
-        "Bạn là Thầy/Cô giáo dạy bộ môn Tin học lớp 10 (Chương trình GDPT 2018 - Sách Kết nối tri thức).\n"
+        "Bạn là Thầy/Cô giáo dạy bộ môn Tin học lớp 10 theo chương trình GDPT 2018 "
+        "(Bộ sách Kết nối tri thức với cuộc sống).\n"
         "Tính cách: Ân cần, hóm hỉnh, sâu sắc, thấu hiểu tâm lý học trò, xưng 'Thầy/Cô' và gọi học sinh là 'em'.\n\n"
         "NGUYÊN TẮC SƯ PHẠM:\n"
         "1. HỖ TRỢ TOÀN DIỆN VÀ TRỰC DIỆN:\n"
-        "   - Học sinh tâm sự mệt mỏi, than khó: Lắng nghe, an ủi và động viên tinh thần trước khi hướng dẫn bài.\n"
-        "   - Học sinh hỏi bài hoặc nhờ xem code: Đọc trực tiếp đoạn code em đang viết ở bên dưới, chỉ rõ em làm đúng chỗ nào, sai ở dòng nào, giải thích bản chất kỹ thuật dễ hiểu (thụt lề, ép kiểu, nháy đơn...).\n"
-        "   - Học sinh hỏi lý thuyết: Giải thích bằng ví dụ thực tế trong cuộc sống.\n"
+        "   - Khi học sinh tâm sự mệt mỏi, áp lực, than khó: Lắng nghe, an ủi và động viên tinh thần trước khi hướng dẫn bài.\n"
+        "   - Khi học sinh hỏi bài hoặc nhờ xem code: Đọc trực tiếp đoạn code em đang viết ở bên dưới, chỉ rõ em làm đúng chỗ nào, sai ở dòng nào, giải thích bản chất kỹ thuật dễ hiểu (như thụt lề, ép kiểu, viết hoa thường...).\n"
+        "   - Khi học sinh hỏi lý thuyết: Giải thích cặn kẽ bằng ví dụ thực tế trong cuộc sống.\n"
         "2. NGUYÊN TẮC KHÔNG LÀM BÀI HỘ:\n"
         "   - Tuyệt đối không xuất toàn bộ đoạn code giải hoàn chỉnh của bài tập để học sinh chép nộp bài.\n"
-        "   - Được phép đưa 1-2 dòng code ví dụ minh họa độc lập cho bài toán khác, hoặc đưa khung sườn gợi ý điền khuyết (...) để em tự lập trình."
+        "   - Được phép đưa 1-2 dòng code ví dụ minh họa độc lập cho một bài toán khác, hoặc đưa khung sườn gợi ý điền khuyết (...) để em tự hoàn thiện."
     )
 
     chat_context = ""
     if chat_history:
         for m in chat_history[-5:-1]:
             sender = "Học sinh" if m.get("role") == "user" else "Thầy/Cô"
-            content = str(m.get("content", "")).strip()
-            if content and not content.startswith("🧑‍🏫") and not content.startswith("❌"):
-                chat_context += f"{sender}: {content}\n"
+            c = str(m.get("content", "")).strip()
+            if c and not c.startswith("🧑‍🏫") and not c.startswith("❌"):
+                chat_context += f"{sender}: {c}\n"
 
     ex_title = curr_ex.get('title', 'Bài tập') if curr_ex else 'Bài tập'
     ex_desc = curr_ex.get('desc', '') if curr_ex else ''
-    ex_concept = curr_ex.get('concept', '') if curr_ex else ''
-    code_preview = student_code.strip() if (student_code and student_code.strip()) else "# Khung soạn thảo đang trống"
-    err_context = runtime_err.strip() if (runtime_err and runtime_err.strip()) else "Không có lỗi runtime"
+    code_preview = student_code.strip() if student_code else "# Khung soạn thảo đang trống"
+    err_context = runtime_err.strip() if runtime_err else "Không có lỗi runtime"
 
-    # Đưa chỉ thị sư phạm trực tiếp vào prompt để tương thích 100% mọi đời model
     full_prompt = (
         f"[CHỈ DẪN GIÁO VIÊN]:\n{teacher_instruction}\n\n"
-        f"[THÔNG TIN BÀI TẬP VÀ MÃ NGUỒN HIỆN TẠI]\n"
-        f"- Tên bài tập: {ex_title}\n"
-        f"- Yêu cầu đề bài: {ex_desc}\n"
-        f"- Trọng tâm kiến thức: {ex_concept}\n\n"
-        f"--- MÃ NGUỒN HỌC SINH ĐANG VIẾT ---\n"
-        f"{code_preview}\n"
-        f"------------------------------------\n\n"
-        f"[KẾT QUẢ KIỂM THỬ / LỖI RUNTIME NẾU CÓ]:\n"
-        f"{err_context}\n\n"
-        f"[LỊCH SỬ TRÒ CHUYỆN GẦN NHẤT]:\n"
-        f"{chat_context if chat_context else 'Bắt đầu cuộc trò chuyện'}\n\n"
-        f"--------------------------------------------------\n"
-        f"HỌC SINH VỪA NÓI: \"{prompt}\"\n\n"
-        f"(Thầy/Cô hãy đọc kỹ và trả lời trực tiếp học sinh với phong thái ân cần, tự nhiên và chuẩn mực sư phạm nhé!)"
+        f"[BÀI TẬP]: {ex_title} - {ex_desc}\n\n"
+        f"[MÃ NGUỒN HỌC SINH ĐANG VIẾT]:\n{code_preview}\n\n"
+        f"[LỖI RUNTIME NẾU CÓ]:\n{err_context}\n\n"
+        f"[LỊCH SỬ TRÒ CHUYỆN GẦN NHẤT]:\n{chat_context}\n\n"
+        f"HỌC SINH VỪA NÓI: \"{prompt}\""
     )
 
-    # Ưu tiên dùng model đã hoạt động thành công trước đó để tối ưu tốc độ
-    cached_model = st.session_state.get("working_gemini_model")
-    candidate_models = [cached_model] if cached_model else []
-    for m in get_prioritized_models(api_key):
-        if m not in candidate_models:
-            candidate_models.append(m)
+    last_error = ""
 
-    last_error_msg = ""
-    for target_model in candidate_models:
+    for api_key in MY_GEMINI_KEYS:
         try:
-            model = genai.GenerativeModel(model_name=target_model)
-            response = model.generate_content(full_prompt)
-            
-            raw_reply = ""
+            genai.configure(api_key=api_key)
+
+            # Tự động lấy danh sách model thực tế mà Google cấp cho khóa này (chống lỗi 404 triệt để)
+            target_model = "gemini-1.5-flash"
             try:
-                raw_reply = response.text.strip()
+                available = [
+                    m.name for m in genai.list_models()
+                    if "generateContent" in m.supported_generation_methods
+                ]
+                # Ưu tiên các model flash có sẵn trong tài khoản
+                for m_name in available:
+                    if "flash" in m_name.lower():
+                        target_model = m_name
+                        break
             except Exception:
-                if response.candidates and response.candidates[0].content.parts:
-                    raw_reply = response.candidates[0].content.parts[0].text.strip()
+                pass
+
+            model = genai.GenerativeModel(target_model)
+            response = model.generate_content(full_prompt)
+
+            raw_reply = ""
+            if hasattr(response, "text") and response.text:
+                raw_reply = response.text.strip()
+            elif response.candidates and response.candidates[0].content.parts:
+                raw_reply = response.candidates[0].content.parts[0].text.strip()
 
             if raw_reply:
-                # Ghi nhớ model hoạt động tốt vào phiên làm việc
-                st.session_state["working_gemini_model"] = target_model
-
-                # Chặn rò rỉ nguyên bài code dài trên 8 dòng
                 def check_leak(match):
                     body = match.group(1).strip()
                     lines = [l for l in body.splitlines() if l.strip()]
@@ -272,10 +229,10 @@ def generate_socratic_ai_response(
                 return filtered.strip()
 
         except Exception as e:
-            last_error_msg = str(e)
-            continue
+            last_error = str(e)
+            continue  # Nếu mã này có vấn đề, vòng lặp tự động chuyển sang mã tiếp theo
 
-    return f"❌ **LỖI KẾT NỐI GEMINI:** `{last_error_msg}`"
+    return f"❌ Lỗi kết nối: {last_error}"
 
 # ==================== CÁC HÀM XỬ LÝ LỖI & THỰC THI SANDBOX ====================
 def translate_system_error(err_str: str) -> str:
@@ -830,11 +787,6 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
                     })
 
                 st.code("\n".join(test_logs), language="text")
-
-                if passed_tests < total_t:
-                    with st.container(border=True):
-                        st.markdown("##### 🔍 Chẩn đoán Nhận thức chuẩn SGK:")
-                        st.info(f"**Vấn đề phát hiện:** {diag_title}\n\n**Quy chuẩn bắt buộc:** {purge_hedging(diag_desc)}")
 
                 if passed_tests < total_t:
                     with st.container(border=True):
