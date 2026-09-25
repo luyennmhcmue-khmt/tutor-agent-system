@@ -1,10 +1,4 @@
-# ==============================================================================
-# NGÂN HÀNG 200 BÀI TẬP TIN HỌC 10 (GDPT 2018)
-# 5 CHƯƠNG X 40 BÀI (10 NHẬN BIẾT - 10 THÔNG HIỂU - 10 VẬN DỤNG - 10 VẬN DỤNG CAO)
-# ==============================================================================
-
 def get_c1_exercises():
-    """Chương 1: Vào/Ra & Biến cơ sở (40 bài thực tế)"""
     data = [
         # --- 10 bài Nhận biết (C1_01 -> C1_10) ---
         ("C1_01", "Nhận biết", "In dòng chữ xin chào", "Viết chương trình in ra màn hình chính xác dòng chữ: `Xin chào Python!`", "print('Xin chào Python!')", "Lệnh print() cơ bản", "", "Xin chào Python!"),
@@ -57,7 +51,6 @@ def get_c1_exercises():
     return [{"id": d[0], "chapter": "Chương 1: Vào/Ra & Biến cơ sở (Bài 16-18)", "difficulty": d[1], "title": d[2], "desc": d[3], "hint": d[4], "concept": d[5], "tests": [{"input": d[6], "expected": d[7]}]} for d in data]
 
 def get_c2_exercises():
-    """Chương 2: Cấu trúc rẽ nhánh & Vòng lặp (40 bài thực tế)"""
     data = [
         # --- 10 bài Nhận biết (C2_01 -> C2_10) ---
         ("C2_01", "Nhận biết", "Kiểm tra số chẵn lẻ", "Nhập số nguyên n. In `CHAN` nếu n chẵn, ngược lại in `LE`.", "n = int(input())\nprint('CHAN' if n % 2 == 0 else 'LE')", "Rẽ nhánh chẵn lẻ", "8", "CHAN"),
@@ -110,7 +103,6 @@ def get_c2_exercises():
     return [{"id": d[0], "chapter": "Chương 2: Rẽ nhánh & Vòng lặp (Bài 19-21)", "difficulty": d[1], "title": d[2], "desc": d[3], "hint": d[4], "concept": d[5], "tests": [{"input": d[6], "expected": d[7]}]} for d in data]
 
 def get_c3_exercises():
-    """Chương 3: Xâu ký tự & Kiểu List (40 bài thực tế)"""
     data = [
         # --- 10 bài Nhận biết (C3_01 -> C3_10) ---
         ("C3_01", "Nhận biết", "Độ dài xâu ký tự", "Nhập một xâu s từ bàn phím. In ra độ dài của xâu.", "s = input()\nprint(len(s))", "Hàm len() của xâu", "EduCoder", "8"),
@@ -163,7 +155,6 @@ def get_c3_exercises():
     return [{"id": d[0], "chapter": "Chương 3: Xâu ký tự & Kiểu List (Bài 22-25)", "difficulty": d[1], "title": d[2], "desc": d[3], "hint": d[4], "concept": d[5], "tests": [{"input": d[6], "expected": d[7]}]} for d in data]
 
 def get_c4_exercises():
-    """Chương 4: Hàm & Chương trình con (40 bài thực tế)"""
     data = [
         # --- 10 bài Nhận biết (C4_01 -> C4_10) ---
         ("C4_01", "Nhận biết", "Định nghĩa hàm tính bình phương", "Nhập số nguyên n. Viết hàm `binh_phuong(x)` trả về x^2 và in ra.", "def binh_phuong(x): return x * x\nprint(binh_phuong(int(input())))", "Từ khóa def và return", "5", "25"),
@@ -216,7 +207,6 @@ def get_c4_exercises():
     return [{"id": d[0], "chapter": "Chương 4: Hàm & Chương trình con (Bài 26-28)", "difficulty": d[1], "title": d[2], "desc": d[3], "hint": d[4], "concept": d[5], "tests": [{"input": d[6], "expected": d[7]}]} for d in data]
 
 def get_c5_exercises():
-    """Chương 5: Thuật toán & Gỡ lỗi (40 bài thực tế)"""
     data = [
         # --- 10 bài Nhận biết (C5_01 -> C5_10) ---
         ("C5_01", "Nhận biết", "Bắt lỗi chia cho 0 đơn giản", "Thực hiện phép chia 10 cho 0 trong khối try-except. Bắt lỗi `ZeroDivisionError` và in `LOI CHIA CHO 0`.", "try:\n print(10 // 0)\nexcept ZeroDivisionError:\n print('LOI CHIA CHO 0')", "Bắt lỗi ZeroDivisionError", "", "LOI CHIA CHO 0"),
@@ -269,7 +259,71 @@ def get_c5_exercises():
     return [{"id": d[0], "chapter": "Chương 5: Thuật toán & Gỡ lỗi (Bài 29-30)", "difficulty": d[1], "title": d[2], "desc": d[3], "hint": d[4], "concept": d[5], "tests": [{"input": d[6], "expected": d[7]}]} for d in data]
 
 def build_all_exercises():
-    """Gộp đầy đủ 200 bài tập thực tế từ 5 chương"""
     return get_c1_exercises() + get_c2_exercises() + get_c3_exercises() + get_c4_exercises() + get_c5_exercises()
 
 REAL_EXERCISES = build_all_exercises()
+def map_exercise_to_concept(ex_id: str, title: str, desc: str) -> str:
+    text_corpus = f"{ex_id} {title} {desc}".lower()
+    
+    if "bubble sort" in text_corpus or "sắp xếp" in text_corpus or "selection sort" in text_corpus:
+        return "thuat_toan_sap_xep"
+    elif "tìm kiếm" in text_corpus or "vị trí xuất hiện" in text_corpus or "two sum" in text_corpus:
+        return "thuat_toan_tim_kiem"
+    elif "xâu" in text_corpus or "chuỗi" in text_corpus or "ký tự" in text_corpus or "ngoặc" in text_corpus:
+        return "kieu_du_lieu_xau"
+    elif "mảng" in text_corpus or "danh sách" in text_corpus or "lst" in text_corpus or ex_id.startswith("C5"):
+        return "kieu_du_lieu_danh_sach"
+    elif "while" in text_corpus:
+        return "vong_lap_while"
+    elif "for" in text_corpus or "dãy số" in text_corpus:
+        return "vong_lap_for"
+    elif "if" in text_corpus or "chẵn" in text_corpus or "lẻ" in text_corpus:
+        return "cau_lenh_if"
+    else:
+        return "bien_va_kieu_du_lieu"
+
+def get_all_exercises_standardized() -> list:
+    standardized_list = []
+    
+    for item in REAL_EXERCISES:
+        if isinstance(item, tuple):
+            ex_id = item[0]
+            level = item[1] if len(item) > 1 else "Cơ bản"
+            title = item[2] if len(item) > 2 else ""
+            desc = item[3] if len(item) > 3 else ""
+            starter = item[4] if len(item) > 4 else ""
+            tests = item[5] if len(item) > 5 else []
+            
+            # Chuẩn hóa test cases
+            formatted_tests = []
+            if isinstance(tests, list):
+                for t in tests:
+                    if isinstance(t, dict):
+                        formatted_tests.append(t)
+                    elif isinstance(t, tuple) and len(t) >= 2:
+                        formatted_tests.append({"input": str(t[0]), "expected_output": str(t[1])})
+            if not formatted_tests:
+                formatted_tests = [{"input": "0", "expected_output": ""}]
+
+            concept = map_exercise_to_concept(ex_id, title, desc)
+
+            standardized_list.append({
+                "id": ex_id,
+                "level": level,
+                "title": f"[{level}] {title}",
+                "concept_id": concept,
+                "chapter": f"Chủ đề {ex_id.split('_')[0] if '_' in ex_id else 'Cốt lõi'}",
+                "description": desc,
+                "starter_code": starter,
+                "test_cases": formatted_tests
+            })
+        elif isinstance(item, dict):
+            if "concept_id" not in item:
+                item["concept_id"] = map_exercise_to_concept(
+                    item.get("id", ""), 
+                    item.get("title", ""), 
+                    item.get("description", "")
+                )
+            standardized_list.append(item)
+
+    return standardized_list

@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+import os
 import io
 import sys
 import re
@@ -6,7 +9,19 @@ import builtins
 import sqlite3
 import streamlit as st
 import pandas as pd
-from src.exercises import REAL_EXERCISES
+import google.generativeai as genai
+
+from src.security import (
+    check_profanity,
+    record_violation,
+    get_user_status,
+    unlock_account,
+    get_all_locked_accounts
+)
+from src.sgk_data import SGK_CURRICULUM
+from src.exercises import REAL_EXERCISES, get_all_exercises_standardized
+
+exercises = get_all_exercises_standardized()
 from src.db import (
     init_db,
     authenticate_user,
@@ -47,7 +62,6 @@ if "doing_exercise" not in st.session_state:
 if "show_test_runner" not in st.session_state:
     st.session_state.show_test_runner = True
 
-# ==================== ĐỊNH DẠNG GIAO DIỆN CHUẨN MẪU ====================
 st.markdown("""
 <style>
 div.st-key-btn_submit_main button {
@@ -85,48 +99,123 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.custom-green-box) {
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== DỮ LIỆU LÝ THUYẾT 30 BÀI SGK TIN HỌC 10 ====================
-LESSONS_DATA = {
-    "Bài 1: Thông tin và xử lý thông tin": "### 1. Thông tin và dữ liệu\n- Dữ liệu: Số liệu, văn bản, âm thanh lưu trữ trên máy tính.\n- Đơn vị đo: Bit, Byte (1B = 8 bits), KB, MB, GB, TB.",
-    "Bài 2: Vai trò của thiết bị thông minh và tin học": "### 1. Thiết bị thông minh\n- Tự động kết nối và xử lý thông tin (Smartphone, Robot, Smart TV).",
-    "Bài 3: Một số kiểu kiến trúc máy tính": "### 1. Kiến trúc Von Neumann\n- Gồm: CPU, Bộ nhớ trong (RAM, ROM), Hệ thống Vào/Ra, Bus liên kết.",
-    "Bài 4: Mạng máy tính và Internet": "### 1. Mạng máy tính & Internet\n- Mạng toàn cầu Internet sử dụng giao thức TCP/IP, định danh qua địa chỉ IP.",
-    "Bài 5: Dữ liệu trong máy tính và hệ số": "### 1. Hệ nhị phân (Binary)\n- Cơ số 2 gồm 0 và 1. Dùng bảng mã ASCII và Unicode (UTF-8) để mã hóa văn bản tiếng Việt.",
-    "Bài 6: Dữ liệu âm thanh và hình ảnh": "### 1. Số hóa đa phương tiện\n- Điểm ảnh pixel (RGB). Âm thanh được lấy mẫu lượng tử hóa thành chuỗi bit.",
-    "Bài 7: Phần mềm đồ họa Vector": "### 1. Đồ họa Vector (Inkscape)\n- Dựa trên công thức toán học, không bị vỡ nét khi phóng to co giãn kích thước.",
-    "Bài 8: Định dạng văn bản và bảng biểu nâng cao": "### 1. Kỹ năng văn bản\n- Ngắt trang (Page Break), ngắt phần (Section Break), mục lục tự động, Header/Footer.",
-    "Bài 9: Sử dụng bảng tính điện tử nâng cao": "### 1. Công thức bảng tính\n- Địa chỉ tương đối (A1), tuyệt đối ($A$1), hỗn hợp ($A1). Các hàm SUM, AVERAGE, IF, COUNTIF.",
-    "Bài 10: Trình diễn đa phương tiện": "### 1. Thiết kế trang chiếu\n- Độ tương phản, phân cấp thông tin thị giác, hiệu ứng slide hợp lý.",
-    "Bài 11: An toàn thông tin và bản quyền": "### 1. An toàn không gian mạng\n- Phòng chống virus, Ransomware, Phishing. Tôn trọng bản quyền phần mềm mã nguồn mở.",
-    "Bài 12: Đạo đức, pháp luật môi trường số": "### 1. Ứng xử văn hóa số\n- Bảo vệ thông tin cá nhân, ứng xử văn minh trên không gian mạng.",
-    "Bài 13: Cơ sở dữ liệu và hệ quản trị CSDL": "### 1. Khái niệm CSDL\n- CSDL lưu trữ dữ liệu có cấu trúc; hệ quản trị DBMS (SQLite, MySQL) xử lý truy vấn.",
-    "Bài 14: Dịch vụ đám mây và IoT": "### 1. Đám mây & IoT\n- Cloud cung cấp tài nguyên trực tuyến; IoT kết nối vạn vật qua cảm biến.",
-    "Bài 15: Trí tuệ nhân tạo (AI)": "### 1. Bản chất AI\n- Ngành khoa học máy tính mô phỏng quá trình tư duy, học tập và suy luận của con người.",
-    "Bài 16: Ngôn ngữ lập trình bậc cao và Python": "### 1. Giới thiệu Python\n- Ngôn ngữ bậc cao, thông dịch, cú pháp rõ ràng.\n- Lệnh in ra màn hình: `print('Xin chào Python!')`",
-    "Bài 17: Biến và lệnh gán": "### 1. Biến & Kiểu dữ liệu\n- Tên biến không chứa dấu cách, không bắt đầu bằng chữ số.\n- Kiểu dữ liệu cơ bản: `int`, `float`, `str`, `bool`.\n- Phép toán: `+`, `-`, `*`, `/`, `//` (chia nguyên), `%` (chia dư).",
-    "Bài 18: Các lệnh vào ra đơn giản": "### 1. Nhập và xuất dữ liệu\n- Nhập chuỗi: `s = input()`\n- Nhập số nguyên: `n = int(input())`\n- Nhập số thực: `x = float(input())`\n- Xuất dữ liệu: `print(giá_trị)`",
-    "Bài 19: Câu lệnh rẽ nhánh if": "### 1. Cú pháp rẽ nhánh\n```python\nif điều_kiện:\n    khối_lệnh\n```\nLưu ý: Bắt buộc thụt lề 4 khoảng trắng.",
-    "Bài 20: Câu lệnh lặp for": "### 1. Vòng lặp for\n```python\nfor i in range(n):\n    khối_lệnh\n```",
-    "Bài 21: Câu lệnh lặp while": "### 1. Vòng lặp while\n```python\nwhile điều_kiện:\n    khối_lệnh\n```",
-    "Bài 22: Kiểu dữ liệu danh sách (List)": "### 1. Khởi tạo danh sách\n`a = [10, 20, 30]`. Phần tử đầu: `a[0]`, phần tử cuối: `a[-1]`.",
-    "Bài 23: Thao tác trên dữ liệu danh sách": "### 1. Phương thức danh sách\n- `len(a)`, `a.append(x)`, `a.remove(x)`, `a.sort()`.",
-    "Bài 24: Xâu ký tự (String)": "### 1. Cấu trúc xâu\n- Xâu đặt trong cặp dấu nháy đơn `'...'`.",
-    "Bài 25: Thao tác trên xâu ký tự": "### 1. Phương thức xử lý xâu\n- `s.split()`, `s.strip()`, `s.upper()`, `s.lower()`.",
-    "Bài 26: Hàm trong Python": "### 1. Định nghĩa hàm\n```python\ndef tên_hàm(tham_số):\n    khối_lệnh\n    return giá_trị\n```",
-    "Bài 27: Tham số của hàm": "### 1. Tham số & Đối số\n- Hỗ trợ tham số mặc định: `def chao(ten='Bạn'):`",
-    "Bài 28: Phạm vi của biến": "### 1. Biến cục bộ & Toàn cục\n- Biến trong hàm là cục bộ. Dùng `global` để chỉnh sửa biến ngoài hàm.",
-    "Bài 29: Nhận biết lỗi chương trình": "### 1. Ba loại lỗi chính\n- `SyntaxError`, `RuntimeError`, `LogicError`.",
-    "Bài 30: Kiểm thử và gỡ lỗi chương trình": "### 1. Kiểm thử\n- Kiểm tra trường hợp thông thường và trường hợp biên."
-}
+# ==================== CƠ CHẾ AI SOCRATIC CHUYÊN GIA (GEMINI API) ====================
+def generate_socratic_ai_response(
+    prompt: str,
+    curr_ex: dict,
+    student_code: str,
+    chat_history: list = None,
+    runtime_err: str = ""
+) -> str:
+    """Gọi trực tiếp Google Gemini API để giải đáp thông minh, trực diện, không né tránh."""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        try:
+            api_key = st.secrets.get("GEMINI_API_KEY", None)
+        except Exception:
+            api_key = None
 
-# ==================== BỘ VIỆT HÓA LỖI HỆ THỐNG (TUYỆT ĐỐI KHÔNG DÙNG 'HOẶC', 'HAY') ====================
+    ex_title = curr_ex.get('title', 'Bài tập')
+    ex_desc = curr_ex.get('desc', '')
+    ex_concept = curr_ex.get('concept', '')
+
+    if not api_key:
+        return (
+            f"Thầy/Cô đang đồng hành cùng em ở bài **'{ex_title}'**.\n\n"
+            f"🎯 **Trọng tâm bài học:** {ex_concept}\n\n"
+            f"*(Hệ thống chưa tìm thấy `GEMINI_API_KEY` trong file .env hoặc secrets. "
+            f"Em hãy kiểm tra khóa API để kích hoạt toàn bộ trí thông minh của AI nhé!)*"
+        )
+
+    try:
+        genai.configure(api_key=api_key)
+        system_instruction = (
+            "Bạn là Thầy/Cô Trợ lý Socratic AI chuyên gia giảng dạy Tin học môn Python "
+            "lớp 10 theo chương trình GDPT 2018 (Bộ sách Kết nối tri thức với cuộc sống).\n"
+            "Bạn sở hữu trí tuệ uyên bác, giao tiếp tự nhiên, thấu hiểu tâm lý học sinh, "
+            "đối đáp thông minh và trực diện như ChatGPT/Claude.\n\n"
+            "NGUYÊN TẮC GIẢI ĐÁP CỐT LÕI:\n"
+            "1. TRẢ LỜI ĐÚNG TRỌNG TÂM - KHÔNG NÉ TRÁNH:\n"
+            "   - Khi học sinh hỏi bất kỳ điều gì (về thuật toán, cú pháp, khái niệm biến, "
+            "hàm, vòng lặp, giải thích lỗi, kiến thức mở rộng hay đời sống), hãy trả lời "
+            "TRỰC DIỆN, THÔNG MINH, giải thích bản chất cặn kẽ và chuẩn xác.\n"
+            "   - Tuyệt đối KHÔNG hỏi vặn ngược lặp lại một cách né tránh sáo rỗng. Hãy cung "
+            "cấp tri thức trước, hướng dẫn tư duy logic rõ ràng.\n"
+            "2. BẮT ĐÚNG BỆNH VÀ PHÂN TÍCH RÕ NGUYÊN NHÂN LỖI:\n"
+            "   - Quan sát mã nguồn học sinh đang viết và lỗi thực thi (nếu có).\n"
+            "   - Chỉ rõ chính xác dòng nào sai và bản chất kỹ thuật (ví dụ: hàm input() "
+            "trả về chuỗi str nên cần ép kiểu int; sau if cần dấu hai chấm : và thụt lề 4 dấu cách...).\n"
+            "   - Hướng dẫn các bước logic để học sinh tự chỉnh sửa mã.\n"
+            "3. NGUYÊN TẮC ZERO FULL-CODE LEAK (KHÔNG GIẢI HỘ CẢ BÀI TẬP):\n"
+            "   - Tuyệt đối không xuất toàn bộ đoạn code giải hoàn chỉnh của bài tập đang làm "
+            "để học sinh chỉ việc copy-paste nộp bài.\n"
+            "   - BẠN ĐƯỢC PHÉP: Đưa ra ví dụ code minh họa độc lập (1-3 dòng) của bài toán "
+            "khác để học sinh hiểu cú pháp, hoặc đưa khung code điền khuyết (dùng dấu ...) "
+            "để học sinh tự làm.\n"
+            "   - Nếu học sinh xin trực tiếp code đáp án: Từ chối hóm hỉnh, khích lệ và chỉ "
+            "rõ các bước thuật toán I-P-O để học sinh tự tay lập trình."
+        )
+
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            system_instruction=system_instruction
+        )
+
+        gemini_hist = []
+        if chat_history:
+            for m in chat_history[:-1]:
+                role = "user" if m.get("role") == "user" else "model"
+                cnt = str(m.get("content", "")).strip()
+                if cnt:
+                    gemini_hist.append({"role": role, "parts": [cnt]})
+
+        code_preview = student_code.strip() if student_code.strip() else "# Khung soạn thảo đang trống"
+        err_context = runtime_err.strip() if runtime_err.strip() else "Không có lỗi runtime"
+
+        full_prompt = (
+            f"[THÔNG TIN BÀI TẬP VÀ MÃ NGUỒN HIỆN TẠI]\n"
+            f"- Tên bài tập: {ex_title}\n"
+            f"- Yêu cầu đề bài: {ex_desc}\n"
+            f"- Trọng tâm kiến thức: {ex_concept}\n"
+            f"- Mã nguồn học sinh đang viết:\n```python\n{code_preview}\n```\n"
+            f"- Trạng thái kiểm thử / Lỗi runtime: {err_context}\n"
+            f"--------------------------------------------------\n"
+            f"HỌC SINH HỎI: \"{prompt}\"\n\n"
+            f"(Yêu cầu: Trả lời thẳng vào trọng tâm câu hỏi của học sinh, giải thích cặn kẽ, "
+            f"chính xác và nhiệt tình. Nếu code sai hãy chỉ đúng vị trí và nguyên nhân. "
+            f"Hướng dẫn tư duy logic chi tiết nhưng không đưa toàn bộ code giải hoàn chỉnh.)"
+        )
+
+        chat = model.start_chat(history=gemini_hist)
+        res = chat.send_message(full_prompt)
+        raw_reply = res.text.strip()
+
+        # Chốt chặn Guardrail: Chặn khối mã giải hoàn chỉnh dài trên 8 dòng
+        def check_leak(match):
+            body = match.group(1).strip()
+            lines = [l for l in body.splitlines() if l.strip()]
+            if len(lines) >= 8 and ("def " in body or "print" in body):
+                return "\n*(Thầy/Cô đã hướng dẫn thuật toán chi tiết ở trên, em hãy tự ráp các câu lệnh vào khung bên trái nhé!)*\n"
+            return match.group(0)
+
+        filtered = re.sub(r"```(?:python)?\s*([\s\S]*?)```", check_leak, raw_reply)
+        return filtered.strip()
+
+    except Exception:
+        return (
+            f"Thầy/Cô đang đồng hành cùng em ở bài **'{ex_title}'**. "
+            f"Trọng tâm của bài này là **{ex_concept}**. "
+            f"Em hãy bấm nút '▶️ Chạy thử' ở bên trái để chúng ta cùng xem kết quả nhé!"
+        )
+
+# ==================== CÁC HÀM XỬ LÝ LỖI & THỰC THI SANDBOX ====================
 def translate_system_error(err_str: str) -> str:
     if not err_str:
         return ""
     err_lower = err_str.lower()
     m_line = re.search(r"dòng (\d+)|line (\d+)", err_str)
     line_str = f" tại dòng {m_line.group(1) or m_line.group(2)}" if m_line else ""
-    
+
     if "invalid syntax" in err_lower or "syntaxerror" in err_lower:
         return f"Sai quy tắc ngữ pháp câu lệnh{line_str}."
     if "can't multiply sequence" in err_lower or "unsupported operand" in err_lower:
@@ -147,17 +236,16 @@ def translate_system_error(err_str: str) -> str:
         return "Phép toán chia cho số 0 vi phạm quy tắc toán học."
     if "indentationerror" in err_lower:
         return "Khối lệnh viết sai thụt lề 4 khoảng trắng."
-        
+
     return "Câu lệnh dừng đột ngột do vi phạm cấu trúc SGK."
 
-# ==================== HÀM SO KHỚP KẾT QUẢ THÔNG MINH ====================
 def is_output_semantically_correct(actual_out: str, expected_out: str) -> bool:
     act = actual_out.strip()
     exp = expected_out.strip()
-    
+
     if act == exp:
         return True
-    
+
     try:
         exp_float = float(exp)
         found_numbers = re.findall(r'[-+]?\d*\.?\d+', act)
@@ -173,7 +261,6 @@ def is_output_semantically_correct(actual_out: str, expected_out: str) -> bool:
 
     return False
 
-# ==================== ĐỘNG CƠ HƯỚNG DẪN TƯ DUY TỪNG BƯỚC ====================
 def get_step_by_step_scaffolding(exercise_info: dict, diag_tag: str, error_msg: str) -> str:
     if diag_tag == "NameError":
         m_name = re.search(r"name '([^']+)' is not defined", error_msg)
@@ -194,50 +281,6 @@ def get_step_by_step_scaffolding(exercise_info: dict, diag_tag: str, error_msg: 
 
     return "💡 **Lỗi cụ thể:** Kết quả thực thi chưa khớp với bộ kiểm thử. Em hãy kiểm tra lại biểu thức tính toán và tên biến."
 
-# ==================== TRỢ LÝ AI TRÒ CHUYỆN & HỎI ĐÁP TOÀN DIỆN ====================
-def generate_conversational_ai_response(prompt: str, curr_ex: dict, student_code: str) -> str:
-    p = prompt.lower()
-    ex_title = curr_ex.get('title', '')
-    ex_desc = curr_ex.get('desc', '')
-    
-    if any(w in p for w in ["chào", "hello", "hi", "cô ơi", "thầy ơi", "giúp em"]):
-        return f"Chào em! Thầy/Cô là Trợ lý Socratic AI. Em đang làm bài **'{ex_title}'**. Em đang gặp vướng mắc cụ thể ở dòng code nào, cứ nói cho thầy/cô biết nhé!"
-    
-    if "input" in p or "nhập" in p:
-        return (
-            "💡 **Giải đáp về lệnh input():**\n"
-            "- Hàm `input()` nhận dữ liệu bàn phím và trả về xâu kí tự (`str`).\n"
-            "- Tính toán số học bắt buộc bọc trong `int(input())` hoặc `float(input())`."
-        )
-        
-    if "print" in p or "in" in p:
-        return (
-            "💡 **Giải đáp về lệnh print():**\n"
-            "- Lệnh `print()` xuất kết quả ra màn hình.\n"
-            "- Cú pháp chuẩn: `print(giá_trị)`."
-        )
-
-    return (
-        f"🤖 **Trợ lý Socratic AI:** Thầy/Cô đã ghi nhận câu hỏi của em về bài **'{ex_title}'**.\n"
-        f"Mã nguồn hiện tại của em:\n```python\n{student_code}\n```\n"
-        f"👉 **Gợi ý hỗ trợ:** Em hãy kiểm tra kỹ các biến đã được gán giá trị qua `input()` chưa, công thức toán học đã đúng chưa và lệnh `print()` đã in trần trụi chưa. Em cần thầy/cô soi giúp đoạn code cụ thể nào không?"
-    )
-
-# ==================== BỘ LỌC TỪ NGỮ THÔ TỤC & KHÓA TỨC THÌ ====================
-PROFANITY_LIST = [
-    "mẹ mày", "đm", "đmm", "vcl", "chó", "vl", "đĩ", "khùng", "đụ", "dkm", "clm",
-    "cặc", "lồn", "buồi", "óc chó", "đĩ khùng", "thằng chó", "mẹ m", "con mẹ",
-    "bố mày", "thằng điên", "đĩ mẹ", "mẹ kiếp", "đụ mẹ", "địt"
-]
-
-def check_profanity(text: str) -> bool:
-    t = text.lower()
-    for word in PROFANITY_LIST:
-        if word in t:
-            return True
-    return False
-
-# ==================== ĐỘNG CƠ THẨM ĐỊNH THỰC THI AN TOÀN ====================
 def execute_student_script(student_code: str, test_input_str: str) -> tuple[str, str]:
     old_stdin, old_stdout = sys.stdin, sys.stdout
     sys.stdin = io.StringIO(test_input_str)
@@ -265,7 +308,6 @@ def execute_student_script(student_code: str, test_input_str: str) -> tuple[str,
 
     return out_res, err_msg
 
-# ==================== ĐỘNG CƠ CHẨN ĐOÁN SƯ PHẠM (TUYỆT ĐỐI KHÔNG DÙNG 'HOẶC', 'HAY') ====================
 HEDGING_PATTERNS = [r"\bcó thể\b", r"\bcó lẽ\b", r"\bdường như\b", r"\bhình như\b", r"\bchắc là\b", r"\bđoán là\b"]
 
 def purge_hedging(text: str) -> str:
@@ -328,7 +370,7 @@ def diagnose_student_misconception(student_code, error_msg, actual_output, exerc
         err_low = error_msg.lower()
         m_ln = re.search(r"dòng (\d+)|line (\d+)", error_msg)
         ln_str = f" tại dòng {m_ln.group(1) or m_ln.group(2)}" if m_ln else ""
-        
+
         if "nameerror" in err_low:
             m_name = re.search(r"name '([^']+)' is not defined", error_msg)
             var_n = f"`{m_name.group(1)}`" if m_name else "biến"
@@ -343,7 +385,7 @@ def diagnose_student_misconception(student_code, error_msg, actual_output, exerc
             return (f"Sai quy tắc thụt lề{ln_str}", "Thụt lề khối lệnh bắt buộc 4 khoảng trắng.", "IndentationError")
         if "syntaxerror" in err_low or "invalid syntax" in err_low:
             return (f"Sai cú pháp câu lệnh{ln_str}", "Vi phạm quy tắc cú pháp Python.", "SyntaxError")
-        
+
         return (f"Lỗi gián đoạn chương trình{ln_str}", translate_system_error(error_msg), "Syntax_General")
 
     if has_input_req and "input(" not in code_str:
@@ -360,7 +402,7 @@ def diagnose_student_misconception(student_code, error_msg, actual_output, exerc
                 all_found = all(num in actual_output for num in exp_nums)
                 if all_found and len(actual_output) > len(first_exp):
                     return ("Lỗi in thừa lời dẫn văn bản", "Thuật toán đúng nhưng máy chấm không cho phép in thêm chữ giải thích.", "Print_Extra_Text")
-        
+
         return ("Kết quả tính toán chưa chính xác", "Chương trình chưa cho ra kết quả chính xác trên các ca kiểm thử.", "Logic_Incorrect_Result")
 
     return ("Chưa đạt yêu cầu", "Em hãy đối chiếu lại đề bài.", "General")
@@ -368,7 +410,7 @@ def diagnose_student_misconception(student_code, error_msg, actual_output, exerc
 def generate_scaffolding_guidance(attempt_count, diagnosis, exercise, error_msg=""):
     title, diag_text, diag_tag = diagnosis
     step_guidance = get_step_by_step_scaffolding(exercise, diag_tag, error_msg)
-    
+
     msg = (
         f"🧑‍🏫 **Chẩn đoán Lỗi & Định hướng Socratic (SGK Tin 10):**\n"
         f"- **Vấn đề nhận diện:** {title}.\n"
@@ -384,14 +426,14 @@ if not st.session_state.authenticated:
             <h2 style='color: white; margin: 0; font-size: 1.4rem; font-weight: 700;'>💻 EDUCODER 10 - TRỢ LÝ HỌC LẬP TRÌNH CÁ NHÂN HÓA TIN HỌC 10</h2>
         </div>
     """, unsafe_allow_html=True)
-    
+
     col_l1, col_l2, col_l3 = st.columns([1, 1.25, 1])
     with col_l2:
         with st.container(border=True):
             st.markdown("### 🔐 Đăng Nhập Hệ Thống")
             login_id = st.text_input("Tài khoản (Email hoặc Mã học sinh):", placeholder="luyennmhcmue@gmail.com hoặc 10a1_01")
             password = st.text_input("Mật khẩu:", type="password")
-            
+
             if st.button("Đăng nhập", type="primary", use_container_width=True):
                 user_data, msg = authenticate_user(login_id.strip(), password.strip())
                 if user_data:
@@ -407,7 +449,34 @@ if not st.session_state.authenticated:
 user = st.session_state.user
 is_teacher = (user.get("role") == "teacher")
 clean_name = user['full_name'].replace("Thầy/Cô", "").replace("Cô", "").replace("Thầy", "").strip()
-is_locked = (user.get("status") in ["Tạm khóa", "locked"] or user.get("strikes", 0) >= 2)
+
+# ĐỒNG BỘ TRẠNG THÁI KHÓA VĨNH VIỄN TỪ Ổ CỨNG (FILE JSON & CSDL)
+student_account_id = user.get("account_id") or user.get("email")
+sec_status = get_user_status(student_account_id)
+is_locked = (
+    user.get("status") in ["Tạm khóa", "locked"]
+    or user.get("strikes", 0) >= 3
+    or sec_status.get("locked", False)
+)
+
+# CHỐT CHẶN CỨNG BẢO VỆ: NẾU ĐÃ BỊ KHÓA 3 LẦN THÌ DÙ CÓ F5 HAY ĐĂNG NHẬP LẠI VẪN BỊ CHẶN ĐỨNG
+if is_locked and not is_teacher:
+    st.markdown("""
+        <div style='background-color: #c9302c; padding: 16px; border-radius: 8px; margin-bottom: 20px; text-align: center;'>
+            <h3 style='color: white; margin: 0;'>🚨 TÀI KHOẢN ĐÃ BỊ KHÓA VĨNH VIỄN DO VI PHẠM KỶ LUẬT</h3>
+        </div>
+    """, unsafe_allow_html=True)
+    st.error(f"Học sinh **{user['full_name']}** (`{student_account_id}`) đã vi phạm chuẩn mực phát ngôn học đường 3 lần liên tiếp.")
+    st.info("Toàn bộ quyền làm bài, luyện tập và trao đổi với Trợ lý AI đã bị đình chỉ. Em vui lòng gặp trực tiếp Thầy/Cô bộ môn để giải trình và xem xét mở khóa.")
+
+    if st.button("🚪 Đăng Xuất Khỏi Hệ Thống", type="secondary"):
+        st.session_state.user = None
+        st.session_state.authenticated = False
+        st.session_state.nav_page = "🏠 Trang chủ"
+        st.session_state.doing_exercise = False
+        st.session_state.messages = []
+        st.rerun()
+    st.stop()
 
 if is_teacher:
     user_tag = f"👨‍🏫 Thầy/Cô {clean_name}"
@@ -446,32 +515,28 @@ st.markdown("<br>", unsafe_allow_html=True)
 if st.session_state.nav_page == "🏠 Trang chủ":
     if not is_teacher:
         st.markdown(f"### Xin chào **{user['full_name']}**!")
-        
-        if is_locked:
-            st.error("🚨 **TÀI KHOẢN ĐANG BỊ TẠM KHÓA DO VI PHẠM KỶ LUẬT ỨNG XỬ.** Vui lòng liên hệ Thầy/Cô bộ môn để mở khóa.")
-            st.stop()
 
         with st.container(border=True):
             st.markdown("#### Ma trận Năng lực Lập trình Thực tế của Em")
             st.caption("Chỉ số % thành thạo được tính toán thực tế 100% từ kết quả bài nộp của em trong CSDL.")
-            
+
             competencies = get_student_competencies(user["account_id"])
             cols_comp = st.columns(len(competencies))
-            
+
             for idx, c in enumerate(competencies):
                 with cols_comp[idx]:
                     m_val = c["mastery_percent"]
                     st.markdown(f"**{c['topic_prefix']}**")
                     st.caption(f"{c['topic_name']}")
                     st.progress(m_val / 100.0)
-                    
+
                     if m_val >= 80:
                         st.success(f"🏆 {m_val}% (Thành thạo)")
                     elif m_val > 0:
                         st.info(f"⚡ {m_val}% (Đang rèn luyện)")
                     else:
                         st.warning("⚠️ 0.0% (Chưa bắt đầu)")
-                    
+
                     st.caption(f"Đạt: **{c['passed_count']}** bài | Đã nộp: **{c['total_attempts']}** lần")
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -479,7 +544,7 @@ if st.session_state.nav_page == "🏠 Trang chủ":
         st.markdown("#### 🚀 Lộ trình Học tập Thích ứng Hôm nay")
         recommendations = get_adaptive_recommendation(user["account_id"], REAL_EXERCISES)
         cols_rec = st.columns(len(recommendations))
-        
+
         for idx, rec in enumerate(recommendations):
             with cols_rec[idx]:
                 with st.container(border=True):
@@ -487,7 +552,7 @@ if st.session_state.nav_page == "🏠 Trang chủ":
                     st.markdown(f"##### 🎯 Bước {idx + 1}: {rec['type']}")
                     st.write(f"**Bài tập:** `[{rec['exercise']['id']}]` {rec['exercise']['title']}")
                     st.caption(f"**Lý do:** {rec['reason']}")
-                    
+
                     if st.button(f"Luyện bài này ➡️", key=f"btn_rec_{idx}", use_container_width=True, type="primary" if idx == 0 else "secondary"):
                         st.session_state.current_ex_id = rec["exercise"]["id"]
                         st.session_state.doing_exercise = True
@@ -521,19 +586,28 @@ if st.session_state.nav_page == "🏠 Trang chủ":
 
 # ----------------- TAB 2: LÝ THUYẾT SGK -----------------
 elif st.session_state.nav_page == "📖 Lý thuyết SGK":
-    st.markdown("### 📖 CỐT LÕI KIẾN THỨC SGK TIN HỌC 10")
-    lesson_keys = list(LESSONS_DATA.keys())
-    selected_lesson = st.selectbox("Chọn bài học:", lesson_keys, index=15)
-    with st.container(border=True):
-        st.markdown(f"## 📘 {selected_lesson}")
-        st.markdown(LESSONS_DATA[selected_lesson])
+    st.markdown("## 📖 CỐT LÕI KIẾN THỨC SGK TIN HỌC 10")
+
+    lesson_keys = list(SGK_CURRICULUM.keys())
+    lesson_titles = [SGK_CURRICULUM[k]["name"] for k in lesson_keys]
+
+    selected_index = st.selectbox(
+        "Chọn bài học:",
+        range(len(lesson_keys)),
+        format_func=lambda i: lesson_titles[i]
+    )
+
+    chosen_lesson = SGK_CURRICULUM[lesson_keys[selected_index]]
+
+    with st.container():
+        st.markdown(f"### 📘 {chosen_lesson['name']}")
+        if "chapter" in chosen_lesson:
+            st.caption(f"📁 {chosen_lesson['chapter']}")
+        st.markdown("---")
+        st.markdown(chosen_lesson["theory"])
 
 # ----------------- TAB 3: KHO BÀI TẬP PYTHON -----------------
 elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
-    if is_locked and not is_teacher:
-        st.error("🚨 **TÀI KHOẢN ĐÃ BỊ TẠM KHÓA DO VI PHẠM KỶ LUẬT.** Vui lòng liên hệ Thầy/Cô để được mở khóa.")
-        st.stop()
-
     if st.session_state.doing_exercise and st.session_state.current_ex_id:
         curr_ex = next((item for item in REAL_EXERCISES if item["id"] == st.session_state.current_ex_id), REAL_EXERCISES[0])
         tests = curr_ex.get("tests", [])
@@ -561,7 +635,7 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
             student_code = st.text_area(label="Trình soạn thảo mã nguồn Python", value=st.session_state[ed_key], key=ed_key, height=180)
 
             col_b1, col_b2 = st.columns([1, 1.2])
-            
+
             with col_b1:
                 st.markdown('<div class="st-key-btn_submit_main">', unsafe_allow_html=True)
                 btn_submit = st.button("Chấm bài", use_container_width=True)
@@ -575,19 +649,19 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
                     st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
 
-            if st.session_state.show_test_runner:
-                in_state_key = f"runner_input_val_{curr_ex['id']}"
-                out_state_key = f"runner_output_val_{curr_ex['id']}"
-                
-                default_test_in = tests[0]["input"] if tests else ""
-                if in_state_key not in st.session_state:
-                    st.session_state[in_state_key] = default_test_in
-                if out_state_key not in st.session_state:
-                    st.session_state[out_state_key] = ""
+            in_state_key = f"runner_input_val_{curr_ex['id']}"
+            out_state_key = f"runner_output_val_{curr_ex['id']}"
 
+            default_test_in = tests[0]["input"] if tests else ""
+            if in_state_key not in st.session_state:
+                st.session_state[in_state_key] = default_test_in
+            if out_state_key not in st.session_state:
+                st.session_state[out_state_key] = ""
+
+            if st.session_state.show_test_runner:
                 with st.container(border=True):
                     st.markdown('<div class="custom-green-box"></div>', unsafe_allow_html=True)
-                    
+
                     c_in, c_out = st.columns(2)
                     with c_in:
                         st.text_area(
@@ -604,7 +678,7 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
                             disabled=True,
                             placeholder="Kết quả xuất ra màn hình..."
                         )
-                    
+
                     c_sp1, c_mid_btn, c_sp2 = st.columns([1.5, 1, 1.5])
                     with c_mid_btn:
                         st.markdown('<div class="st-key-btn_run_action">', unsafe_allow_html=True)
@@ -613,7 +687,7 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
                             if not current_input_feed and tests:
                                 current_input_feed = tests[0].get("input", "")
                                 st.session_state[in_state_key] = current_input_feed
-                            
+
                             r_out, r_err = execute_student_script(student_code, current_input_feed)
                             if r_err:
                                 st.session_state[out_state_key] = f"Lỗi: {translate_system_error(r_err)}"
@@ -624,7 +698,7 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
 
             if btn_submit:
                 all_tests = list(tests)
-                
+
                 if curr_ex['id'] == "C1_21":
                     rw, rh = round(random.uniform(2.0, 9.0), 1), round(random.uniform(2.0, 9.0), 1)
                     all_tests.append({"input": f"{rw}\n{rh}", "expected": str(round(rw * rh, 2))})
@@ -663,13 +737,13 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
                 )
 
                 attempt_count = get_exercise_submission_count(user.get('account_id'), curr_ex['id']) + 1
-                
+
                 save_submission(
-                    user.get('account_id'), 
-                    curr_ex['id'], 
-                    student_code, 
-                    "Passed" if passed_tests == total_t else "Failed", 
-                    score, 
+                    user.get('account_id'),
+                    curr_ex['id'],
+                    student_code,
+                    "Passed" if passed_tests == total_t else "Failed",
+                    score,
                     diag_title if passed_tests < total_t else ""
                 )
 
@@ -704,19 +778,49 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
                     with st.chat_message(m["role"]):
                         st.markdown(m["content"])
 
+            # XỬ LÝ CHAT THÔNG MINH & QUY TẮC KỶ LUẬT 3-STRIKE CHỐNG F5
             if user_prompt := st.chat_input("Nhập câu hỏi, thắc mắc hoặc trò chuyện với AI..."):
                 st.session_state.messages.append({"role": "user", "content": user_prompt})
 
+                # 1. KIỂM DUYỆT TỪ NGỮ THÔ TỤC
                 if check_profanity(user_prompt):
                     if not is_teacher:
+                        # Ghi nhận vi phạm vào cả CSDL SQLite và tệp JSON bền vững
                         add_strike(user.get('account_id'))
-                        st.session_state.user["strikes"] = st.session_state.user.get("strikes", 0) + 1
-                        st.session_state.user["status"] = "Tạm khóa"
-                    st.error("🚨 **TÀI KHOẢN ĐÃ BỊ KHÓA NGAY LẬP TỨC!** Em đã vi phạm quy chuẩn văn hóa ứng xử.")
-                    st.rerun()
+                        strikes_cnt, is_now_locked = record_violation(student_account_id, user_prompt)
+                        st.session_state.user["strikes"] = strikes_cnt
+
+                        if strikes_cnt == 1:
+                            ai_ans = (
+                                "⚠️ **CẢNH BÁO LẦN 1/3:** Em vừa sử dụng từ ngữ chưa phù hợp chuẩn mực học đường. "
+                                "Em hãy giữ lời nói văn minh để cùng học tập tiến bộ nhé!"
+                            )
+                        elif strikes_cnt == 2:
+                            ai_ans = (
+                                "🚨 **CẢNH BÁO LẦN 2/3:** Em đã vi phạm phát ngôn lần thứ 2! "
+                                "Nếu vi phạm thêm **1 lần nữa**, tài khoản sẽ bị **KHÓA VĨNH VIỄN** "
+                            )
+                        else:
+                            st.session_state.user["status"] = "Tạm khóa"
+                            ai_ans = (
+                                "🔒 **TÀI KHOẢN ĐÃ BỊ KHÓA:** Em đã vi phạm quy định ngôn từ 3 lần liên tiếp. "
+                                "Quyền truy cập hệ thống của em đã bị đình chỉ. Vui lòng liên hệ Thầy/Cô để giải trình."
+                            )
+                            st.session_state.messages.append({"role": "assistant", "content": ai_ans})
+                            st.rerun()
+                    else:
+                        ai_ans = "⚠️ Cảnh báo: Giáo viên không nên sử dụng từ ngữ này trong môi trường sư phạm."
                 else:
-                    ai_ans = generate_conversational_ai_response(user_prompt, curr_ex, student_code)
-                
+                    # 2. GIA SƯ AI THÔNG MINH TRỰC TIẾP TỪ GEMINI
+                    with st.spinner("Thầy/Cô AI đang xem xét bài và giải đáp..."):
+                        ai_ans = generate_socratic_ai_response(
+                            prompt=user_prompt,
+                            curr_ex=curr_ex,
+                            student_code=student_code,
+                            chat_history=st.session_state.messages,
+                            runtime_err=st.session_state.get(out_state_key, "")
+                        )
+
                 ai_ans = purge_hedging(ai_ans)
                 st.session_state.messages.append({"role": "assistant", "content": ai_ans})
                 st.rerun()
@@ -724,19 +828,19 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
     else:
         st.markdown("### 📚 KHO BÀI TẬP PYTHON")
         col_filters, col_detail = st.columns([1.1, 1.3])
-        
+
         with col_filters:
             chap_list = sorted(list(set(e["chapter"] for e in REAL_EXERCISES)))
             selected_chapter = st.selectbox("Chọn chương kiến thức:", chap_list)
-            
+
             diff_options = ["Tất cả", "Nhận biết", "Thông hiểu", "Vận dụng", "Vận dụng cao"]
             selected_diff = st.radio("Mức độ nhận thức:", diff_options, horizontal=True)
-            
+
             filtered_exercises = [
-                ex for ex in REAL_EXERCISES 
+                ex for ex in REAL_EXERCISES
                 if ex["chapter"] == selected_chapter and (selected_diff == "Tất cả" or ex["difficulty"] == selected_diff)
             ]
-            
+
             ex_options = [f"[{ex['id']}] {ex['title']}" for ex in filtered_exercises]
             if ex_options:
                 selected_ex_str = st.selectbox("Chọn bài thực hành:", ex_options)
@@ -763,7 +867,7 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
                             st.caption(f"- **Test #{idx + 1}:** Input = `{clean_inp}` ➔ Output = `{t['expected']}`")
                         else:
                             st.caption(f"- **Test #{idx + 1}:** Output = `{t['expected']}`")
-                    
+
                     if st.button("🚀 Bắt đầu làm bài với Trợ lý AI", type="primary", use_container_width=True):
                         st.session_state.current_ex_id = chosen_exercise['id']
                         st.session_state.doing_exercise = True
@@ -773,23 +877,23 @@ elif st.session_state.nav_page == "📝 Kho Bài Tập Python":
 # ----------------- TAB 4: BÁO CÁO BENCHMARK -----------------
 elif st.session_state.nav_page == "📊 Báo cáo Benchmark" and is_teacher:
     st.markdown("### 📊 BÁO CÁO BENCHMARK")
-    
+
     real_data = get_real_benchmark_report()
-    
+
     if real_data:
         df_bench = pd.DataFrame(real_data)
         active_count = len(df_bench[df_bench["total_submissions"] > 0])
         total_subs = int(df_bench["total_submissions"].sum())
         locked_count = len(df_bench[df_bench["status_display"] == "Tạm khóa"])
-        
+
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("👥 Tổng số học sinh", f"{len(df_bench)} HS (10 Lớp)")
         k2.metric("📝 Học sinh đã làm bài", f"{active_count} HS")
         k3.metric("🚀 Tổng lượt nộp bài", f"{total_subs} lần")
         k4.metric("🛡️ Học sinh vi phạm tạm khóa", f"{locked_count} HS", delta_color="inverse")
-        
+
         st.markdown("---")
-        
+
         col_f1, col_f2 = st.columns([1, 2])
         with col_f1:
             class_list = ["Tất cả các lớp"] + [f"10A{i}" for i in range(1, 11)]
@@ -803,7 +907,7 @@ elif st.session_state.nav_page == "📊 Báo cáo Benchmark" and is_teacher:
         if search_name:
             q = search_name.strip().lower()
             df_view = df_view[
-                df_view["full_name"].str.lower().str.contains(q) | 
+                df_view["full_name"].str.lower().str.contains(q) |
                 df_view["account_id"].str.lower().str.contains(q)
             ]
 
@@ -825,7 +929,7 @@ elif st.session_state.nav_page == "📊 Báo cáo Benchmark" and is_teacher:
             "highest_display": "Điểm cao nhất",
             "avg_display": "Điểm trung bình"
         })
-        
+
         df_display.reset_index(drop=True, inplace=True)
         df_display.index = range(1, len(df_display) + 1)
         df_display.index.name = "STT"
@@ -837,7 +941,7 @@ elif st.session_state.nav_page == "📊 Báo cáo Benchmark" and is_teacher:
 elif st.session_state.nav_page == user_tag:
     st.markdown(f"### {clean_name}")
     col_p1, col_p2 = st.columns(2)
-    
+
     if is_teacher:
         with col_p1:
             with st.container(border=True):
@@ -858,7 +962,8 @@ elif st.session_state.nav_page == user_tag:
                         with cb:
                             if st.button("🔓 Mở", key=f"unl_{s['id']}"):
                                 unlock_user(s['id'])
-                                st.success(f"Đã mở khóa cho {s['full_name']}!")
+                                unlock_account(s['account_id'])
+                                st.success(f"Đã mở khóa thành công cho {s['full_name']}!")
                                 st.rerun()
                 else:
                     st.success("✅ Không có học sinh nào bị tạm khóa.")
@@ -883,8 +988,8 @@ elif st.session_state.nav_page == user_tag:
                 st.write(f"**Mã số học sinh:** `{user.get('account_id', '')}`")
                 st.write(f"**Lớp học:** {user.get('class_name', '10')}")
                 st.write(f"**Trạng thái tài khoản:** {user.get('status', 'Bình thường')}")
-                st.write(f"**Số lần vi phạm kỷ luật:** `{user.get('strikes', 0)}/2`")
-                
+                st.write(f"**Số lần vi phạm kỷ luật:** `{user.get('strikes', 0)}/3`")
+
                 highest_score = get_student_highest_score(user.get('account_id'))
                 comps = get_student_competencies(user.get('account_id'))
                 total_passed = sum(c['passed_count'] for c in comps)
@@ -907,7 +1012,7 @@ elif st.session_state.nav_page == user_tag:
                     else:
                         st.error("Thông tin không chính xác hoặc mật khẩu mới chưa khớp.")
 
-    st.markdown("---")  
+    st.markdown("---")
     if st.button("🚪 Đăng Xuất Khỏi Hệ Thống", type="secondary", use_container_width=True):
         st.session_state.user = None
         st.session_state.authenticated = False

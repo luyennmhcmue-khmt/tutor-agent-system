@@ -1,0 +1,18 @@
+{
+  "10a8_09": {
+    "strikes": 2,
+    "locked": false,
+    "history": [
+      {
+        "time": "2026-09-25 07:25:30",
+        "strike": 1,
+        "prompt": "ngu"
+      },
+      {
+        "time": "2026-09-25 07:25:42",
+        "strike": 2,
+        "prompt": "mẹ mày"
+      }
+    ]
+  }
+}

@@ -1,7 +1,32 @@
 import os
 import random
 import sqlite3
+import sqlite3
+import datetime
 
+def init_telemetry_table(db_path: str = "data/database"):
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS thesis_telemetry (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT,
+                timestamp TEXT,
+                concept_id TEXT,
+                bkt_prior REAL,
+                bkt_posterior REAL,
+                scaffold_level INTEGER,
+                is_correct INTEGER,
+                ast_valid INTEGER
+            )
+        """)
+
+def log_learning_step(db_path: str, student_id: str, concept: str, prior: float, post: float, level: int, is_correct: bool, ast_valid: bool):
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("""
+            INSERT INTO thesis_telemetry 
+            (student_id, timestamp, concept_id, bkt_prior, bkt_posterior, scaffold_level, is_correct, ast_valid)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (student_id, datetime.datetime.now().isoformat(), concept, prior, post, level, int(is_correct), int(ast_valid)))
 DB_DIR = "data"
 DB_PATH = os.path.join(DB_DIR, "database.db")
 
