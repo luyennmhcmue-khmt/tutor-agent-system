@@ -137,8 +137,11 @@ def select_working_gemini_model(api_key: str):
     return "models/gemini-1.5-flash-latest"
 
 try:
-  if "GEMINI_API_KEYS" in st.secrets:
+  if "GEMINI_API_KEY" in st.secrets:
     MY_GEMINI_KEYS = [st.secrets["GEMINI_API_KEY"]]
+  elif "GEMINI_API_KEYS" in st.secrets:
+    val = st.secrets["GEMINI_API_KEYS"]
+    MY_GEMINI_KEYS = val if isinstance(val, list) else [val]
   else:
     MY_GEMINI_KEYS = []
 except Exception:
