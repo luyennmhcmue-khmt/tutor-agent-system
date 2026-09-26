@@ -136,14 +136,13 @@ def select_working_gemini_model(api_key: str):
         pass
     return "models/gemini-1.5-flash-latest"
 
-MY_GEMINI_KEYS = [
-    "AIzaSyCQdszrpQyh2wUq2iAZPzJoUgVlf1lmwiE",
-    "AIzaSyDVe6hz98Dc20Iscj0qP5WGM8IHR2FmSp8",
-    "AIzaSyDLkga_xRitsjHk8kSt8sZCvT5fbLCuZJc",
-    "AIzaSyBF7fvwWKPXdPxF5uTXBuqjy5C7MdL9YLI"
-]
-
-
+try:
+  if "GEMINI_API_KEYS" in st.secrets:
+    MY_GEMINI_KEYS = [st.secrets["GEMINI_API_KEY"]]
+  else:
+    MY_GEMINI_KEYS = []
+except Exception:
+  MY_GEMINI_KEYS = []
 def generate_socratic_ai_response(
     prompt: str,
     curr_ex: dict,
